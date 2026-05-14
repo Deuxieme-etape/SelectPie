@@ -9,7 +9,22 @@ Maximum likelihood estimation for compositional outcome models
 that account for selection into the sample using a bivariate
 extreme value (Gumbel-logistic) copula.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/Deuxieme-etape/SelectPie}
+  \item Report bugs at \url{https://github.com/Deuxieme-etape/SelectPie/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: First Last \email{you@email.com}
+\strong{Maintainer}: Erik Chi \email{erikchi@tamu.edu}
+
+Authors:
+\itemize{
+  \item Thiago Moreira \email{tmoreira@lsu.edu}
+  \item Guy Whitten \email{g-whitten@tamu.edu}
+  \item Yongzhi Xu \email{yz_xu@tamu.edu}
+}
 
 }
