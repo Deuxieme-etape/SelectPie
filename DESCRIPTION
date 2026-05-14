@@ -1,0 +1,19 @@
+Package: SelectPie
+Type: Package
+Title: MLE for Compositional Models with Sample Selection
+Version: 0.1.0
+Authors@R: person("First", "Last", email = "you@email.com",
+    role = c("aut", "cre"))
+Description: Maximum likelihood estimation for compositional outcome models
+    that account for selection into the sample using a bivariate extreme
+    value (Gumbel-logistic) copula. Provides the core estimator SelectPie(),
+    supporting helpers for the bivariate EVD integral and marginal CDF, and
+    a utility for exporting results to LaTeX tables.
+License: MIT + file LICENSE
+Encoding: UTF-8
+RoxygenNote: 7.3.2
+Imports:
+    stats
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
