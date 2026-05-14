@@ -2,8 +2,12 @@ Package: SelectPie
 Type: Package
 Title: MLE for Compositional Models with Sample Selection
 Version: 0.1.0
-Authors@R: person("First", "Last", email = "you@email.com",
-    role = c("aut", "cre"))
+Authors@R: c(
+	     person("Erik", "Chi", email = "erikchi@tamu.edu", role = c("aut", "cre")), 
+	     person("Thiago", "Moreira", email = "tmoreira@lsu.edu", role = c("aut")),
+	     person("Guy", "Whitten", email = "g-whitten@tamu.edu", role = c("aut")),
+	     person("Yongzhi", "Xu", email = "yz_xu@tamu.edu", role = c("aut"))
+            )
 Description: Maximum likelihood estimation for compositional outcome models
     that account for selection into the sample using a bivariate extreme
     value (Gumbel-logistic) copula. Provides the core estimator SelectPie(),
