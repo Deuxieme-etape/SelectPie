@@ -233,54 +233,83 @@ SelectPie <- function(data, y1, x1, y2, x2,
 #' @param booktabs Logical. If \code{TRUE} (the default), uses
 #'   \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
 #'   the \pkg{booktabs} LaTeX package instead of \code{\\hline}.
+#' @param split_at Integer or \code{NULL}. Row index where the outcome
+#'   equation begins. If supplied, a midrule and section headers
+#'   ("Selection Equation" and "Outcome Equation") are inserted
+#'   automatically. Typically \code{2 * (length(x1) + 1)} when using
+#'   bootstrapped standard errors.
+#' @param sel_label Character string. Label for the selection equation
+#'   section header. Default is \code{"Selection Equation"}.
+#' @param out_label Character string. Label for the outcome equation
+#'   section header. Default is \code{"Outcome Equation"}.
 #'
 #' @return Invisibly returns the character vector of LaTeX lines; called
 #'   primarily for the side effect of printing via \code{cat}.
 #'
 #' @export
 latex_table <- function(x,
-                        caption  = NULL,
-                        label    = NULL,
-                        align    = NULL,
-                        booktabs = TRUE) {
-
+                        caption   = NULL,
+                        label     = NULL,
+                        align     = NULL,
+                        booktabs  = TRUE,
+                        split_at  = NULL,
+                        sel_label = "Selection Equation",
+                        out_label = "Outcome Equation") {
+  
   x  <- as.matrix(x)
   nr <- nrow(x)
   nc <- ncol(x)
-
+  
   # Default alignment: row-name column left, data columns centred
   if (is.null(align)) {
     align <- paste0("l", paste(rep("c", nc), collapse = ""))
   }
-
+  
   # ---- Build LaTeX lines ----
   out <- c("\\begin{table}[!htbp]", "\\centering")
-
+  
   if (!is.null(caption)) {
     out <- c(out, paste0("\\caption{", caption, "}"))
   }
   if (!is.null(label)) {
-    out <- c(out, paste0("\\label{",   label,   "}"))
+    out <- c(out, paste0("\\label{", label, "}"))
   }
-
+  
   out <- c(out, paste0("\\begin{tabular}{", align, "}"))
-
+  
   top_rule <- if (booktabs) "\\toprule" else "\\hline"
   mid_rule <- if (booktabs) "\\midrule" else "\\hline"
   bot_rule <- if (booktabs) "\\bottomrule" else "\\hline"
-
+  
   # Header row
   header <- paste(c("", colnames(x)), collapse = " & ")
   out <- c(out, top_rule, paste0(header, " \\\\"), mid_rule)
-
-  # Data rows
+  
+  # Section header helper: spans all columns with \multicolumn
+  n_cols <- nc + 1L  # +1 for the row-name column
+  make_section_header <- function(label) {
+    paste0("\\multicolumn{", n_cols, "}{l}{\\textit{", label, "}} \\\\")
+  }
+  
+  # ---- Data rows with optional split ----
   for (i in seq_len(nr)) {
+    
+    # Insert selection header before row 1
+    if (!is.null(split_at) && i == 1L) {
+      out <- c(out, make_section_header(sel_label))
+    }
+    
+    # Insert midrule + outcome header before split_at row
+    if (!is.null(split_at) && i == split_at) {
+      out <- c(out, mid_rule, make_section_header(out_label))
+    }
+    
     row_i <- paste(c(rownames(x)[i], x[i, ]), collapse = " & ")
     out   <- c(out, paste0(row_i, " \\\\"))
   }
-
+  
   out <- c(out, bot_rule, "\\end{tabular}", "\\end{table}")
-
+  
   cat(paste(out, collapse = "\n"))
   invisible(out)
 }
