@@ -10,7 +10,6 @@ latex_table(
   label = NULL,
   align = NULL,
   booktabs = TRUE,
-  split_at = NULL,
   sel_label = "Selection Equation",
   out_label = "Outcome Equation"
 )
@@ -30,12 +29,6 @@ row-name column and centring all data columns.}
 \item{booktabs}{Logical. If \code{TRUE} (the default), uses
 \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
 the \pkg{booktabs} LaTeX package instead of \code{\\hline}.}
-
-\item{split_at}{Integer or \code{NULL}. Row index where the outcome
-equation begins. If supplied, a midrule and section headers
-("Selection Equation" and "Outcome Equation") are inserted
-automatically. Typically \code{2 * (length(x1) + 1)} when using
-bootstrapped standard errors.}
 
 \item{sel_label}{Character string. Label for the selection equation
 section header. Default is \code{"Selection Equation"}.}

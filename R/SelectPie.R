@@ -196,23 +196,44 @@ SelectPie <- function(data, y1, x1, y2, x2,
       
       boot_ests[b, ] <- tryCatch(
         .fit(bootstrap_data),
-        error = function(e) rep(NA_real_, k)  # skip failed draws gracefully
+        error = function(e) rep(NA_real_, k)
       )
     }
     
     boot_se <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
     
-    # Interleave point estimates and SEs
-    results <- as.matrix(as.vector(rbind(point_est, boot_se)))
-    colnames(results) <- y1
-    rownames(results) <- row_names
+    # ---- Format estimates with significance stars and SEs in parentheses ----
+    results <- matrix(NA_character_, nrow = 2 * k, ncol = 1,
+                      dimnames = list(row_names, y1))
+    
+    for (r in seq_len(k)) {
+      est  <- point_est[r]
+      se   <- boot_se[r]
+      tstat <- abs(est / se)
+      
+      # Stars based on t-statistic
+      stars <- if (tstat > 2.575) {
+        "$^{***}$"
+      } else if (tstat > 1.96) {
+        "$^{**}$"
+      } else if (tstat > 1.645) {
+        "$^{*}$"
+      } else {
+        ""
+      }
+      
+      # Estimate row (odd): rounded value + stars
+      results[2 * r - 1, 1] <- paste0(round(est, 3), stars)
+      
+      # SE row (even): rounded value in parentheses
+      results[2 * r,     1] <- paste0("(", round(se, 3), ")")
+    }
     
   } else {
     
-    # No bootstrap — just return point estimates (odd rows only)
-    results <- as.matrix(point_est[c(TRUE, FALSE)])
-    colnames(results) <- y1
-    rownames(results) <- row_names[c(TRUE, FALSE)]
+    # No bootstrap — just return rounded point estimates (odd rows only)
+    results <- matrix(round(point_est, 3), nrow = k, ncol = 1,
+                      dimnames = list(row_names[c(TRUE, FALSE)], y1))
   }
   
   results
@@ -233,11 +254,6 @@ SelectPie <- function(data, y1, x1, y2, x2,
 #' @param booktabs Logical. If \code{TRUE} (the default), uses
 #'   \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
 #'   the \pkg{booktabs} LaTeX package instead of \code{\\hline}.
-#' @param split_at Integer or \code{NULL}. Row index where the outcome
-#'   equation begins. If supplied, a midrule and section headers
-#'   ("Selection Equation" and "Outcome Equation") are inserted
-#'   automatically. Typically \code{2 * (length(x1) + 1)} when using
-#'   bootstrapped standard errors.
 #' @param sel_label Character string. Label for the selection equation
 #'   section header. Default is \code{"Selection Equation"}.
 #' @param out_label Character string. Label for the outcome equation
@@ -252,13 +268,14 @@ latex_table <- function(x,
                         label     = NULL,
                         align     = NULL,
                         booktabs  = TRUE,
-                        split_at  = NULL,
                         sel_label = "Selection Equation",
                         out_label = "Outcome Equation") {
   
   x  <- as.matrix(x)
   nr <- nrow(x)
   nc <- ncol(x)
+  
+  split_at = (nrow(x)/2)+2
   
   # Default alignment: row-name column left, data columns centred
   if (is.null(align)) {
