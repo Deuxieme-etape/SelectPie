@@ -12,58 +12,33 @@ SelectPie(
   x2,
   method = "BFGS",
   maxit = 1000,
-  multistart_corr = TRUE
+  multistart_corr = TRUE,
+  B = 0
 )
 }
 \arguments{
-\item{data}{A \code{data.frame} containing all variables.}
+\item{data}{A data.frame containing all variables.}
 
-\item{y1}{Character string. Name of the binary selection indicator
-(1 = selected, 0 = not selected).}
+\item{y1}{Character string. Name of the binary selection indicator.}
 
-\item{x1}{Character vector of regressor names for the selection equation.
-An intercept is added automatically via \code{model.matrix}.}
+\item{x1}{Character vector of regressor names for the selection equation.}
 
-\item{y2}{Character string. Name of the continuous compositional outcome
-(observed only when \code{y1 == 1}).}
+\item{y2}{Character string. Name of the continuous compositional outcome.}
 
-\item{x2}{Character vector of regressor names for the outcome equation.
-An intercept is added automatically via \code{model.matrix}.}
+\item{x2}{Character vector of regressor names for the outcome equation.}
 
-\item{method}{Character string passed to \code{\link[stats]{optim}}.
-Default is \code{"BFGS"}.}
+\item{method}{Optimization method passed to optim. Default is "BFGS".}
 
-\item{maxit}{Integer. Maximum number of iterations passed to
-\code{\link[stats]{optim}}. Default is \code{1000}.}
+\item{maxit}{Maximum number of iterations. Default is 1000.}
 
-\item{multistart_corr}{Logical. If \code{TRUE} (the default), the
-optimiser is restarted from two additional starting values for the
-dependence parameter (\eqn{\gamma \in \{-2, 2\}}) and the best
-solution is retained.}
+\item{multistart_corr}{Logical. Use multiple starting values for dependence parameter.}
+
+\item{B}{Integer. Number of bootstrap replications. Set to 0 (default) to skip (only obtain point estimates).}
 }
 \value{
-A named numeric vector containing:
-  \describe{
-    \item{Selection coefficients}{Entries \code{1:p1} correspond to
-      \code{x1} (including intercept).}
-    \item{Outcome coefficients}{Entries \code{(p1+1):(p1+p2)} correspond
-      to \code{x2} (including intercept).}
-    \item{rho}{The final entry is the back-transformed dependence
-      parameter \eqn{\rho = 1 - 1/(1 + e^{\hat\gamma})} in (0, 1).}
-  }
+A matrix with point estimates and (if B > 0) bootstrapped standard errors.
 }
 \description{
 Maximum likelihood estimation for compositional outcome models with
-selection into the sample.
-}
-\details{
-Fits a two-equation system in which a binary selection equation
-(equation 1) determines whether the continuous compositional outcome
-(equation 2) is observed.  Joint dependence between the two equations
-is modelled via a bivariate Gumbel-logistic (extreme value) copula with
-dependence parameter \eqn{m \ge 1}, reparameterised as
-\eqn{m = \exp(\gamma) + 1} so that optimisation is unconstrained.
-}
-\seealso{
-\code{\link{int_evd_closed}}, \code{\link{cdfevd}}
+selection into the sample, with optional bootstrapped standard errors.
 }
