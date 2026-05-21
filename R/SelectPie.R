@@ -409,6 +409,9 @@ latex_table <- function(x,
   
   out <- c(out, bot_rule, "\\end{tabular}", "\\end{table}")
   
+  # remove any underscores so things compile properly in tex. 
+  out <- gsub("_", " ", out)
+  
   cat(paste(out, collapse = "\n"))
   invisible(out)
 }
