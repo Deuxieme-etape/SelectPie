@@ -176,12 +176,65 @@ SelectPie <- function(data, y1, x1, y2, x2,
   # ---- Point estimates on full data ----
   point_est <- .fit(data)
   
+  # ---- Internal fit statistics (EVD copula likelihood) ----
+  .fit_stats <- function(point_est) {
+    
+    k1 <- length(x1) + 1
+    k2 <- length(x2) + 1
+    
+    beta1 <- point_est[seq_len(k1)]
+    beta2 <- point_est[(k1 + 1L):(k1 + k2)]
+    rho   <- point_est[k1 + k2 + 1L]
+    
+    # Recover m from back-transformed rho
+    m <- 1 / (1 - rho)
+    
+    X1 <- stats::model.matrix(stats::reformulate(x1, response = NULL), data = data)
+    X2 <- stats::model.matrix(stats::reformulate(x2, response = NULL), data = data)
+    
+    y1v <- data[[y1]]
+    y2v <- data[[y2]]
+    
+    xb1 <- as.vector(-(X1 %*% beta1))
+    xb2 <- as.vector( (X2 %*% beta2))
+    u   <- y2v - xb2
+    
+    ll <- rep(NA_real_, nrow(data))
+    
+    observed     <- y1v == 1 & !is.na(y2v)
+    not_observed <- y1v == 0
+    
+    # Not selected: log F_1(xb1)
+    x1s <- xb1 - digamma(1)
+    ll[not_observed] <- -exp(-x1s[not_observed])
+    
+    # Selected: log integral of bivariate EVD
+    integ <- int_evd_closed(xb1[observed], u[observed], m)
+    ll[observed] <- log(pmax(integ, .Machine$double.xmin))
+    
+    logLik_val <- sum(ll, na.rm = TRUE)
+    
+    n_params <- length(point_est)
+    n_obs    <- sum(!is.na(y1v))
+    
+    data.frame(
+      logLik = round(logLik_val,          3),
+      AIC    = round(-2 * logLik_val + 2 * n_params,        3),
+      BIC    = round(-2 * logLik_val + log(n_obs) * n_params, 3),
+      n      = n_obs,
+      k      = n_params
+    )
+  }
+  
+  # ---- Fit Statistics ----
+  fit_stats <- .fit_stats(point_est)
+  
   # ---- Row names for output matrix ----
   x1_full <- as.vector(rbind(c("(Intercept1)", x1), ""))
   x2_full <- as.vector(rbind(c("(Intercept2)", x2, "Corr."), ""))
   row_names <- c(x1_full, x2_full)
   
-  k <- length(x1) + length(x2) + 3
+  k <- length(x1) + length(x2) + 3 # plus 3 because of the two intercepts and Corr.
   
   # ---- Bootstrap (only if B > 0) ----
   if (B > 0) {
@@ -236,50 +289,73 @@ SelectPie <- function(data, y1, x1, y2, x2,
                       dimnames = list(row_names[c(TRUE, FALSE)], y1))
   }
   
-  results
+  list(
+    results = results, 
+    fit_stats = fit_stats
+  )
+  
 }
 
 
 #' latex_table
 #'
-#' Format a matrix or data frame as a LaTeX \code{table} environment.
+#' Format a SelectPie results list or a matrix as a LaTeX \code{table} environment.
+#' When passed a SelectPie results list (with \code{results} and \code{fit_stats}),
+#' the function automatically splits the table at the outcome equation and appends
+#' fit statistics at the bottom.
 #'
-#' @param x A matrix or object coercible to one via \code{as.matrix}.
+#' @param x A SelectPie results list (from \code{\link{SelectPie}}) or a matrix
+#'   coercible via \code{as.matrix}.
 #' @param caption Character string or \code{NULL}. Table caption.
 #' @param label Character string or \code{NULL}. LaTeX label for
 #'   \code{\\ref\{\}} cross-referencing.
 #' @param align Character string or \code{NULL}. Column alignment
-#'   specification, e.g. \code{"lcccc"}.  Defaults to left-aligning the
+#'   specification, e.g. \code{"lcccc"}. Defaults to left-aligning the
 #'   row-name column and centring all data columns.
 #' @param booktabs Logical. If \code{TRUE} (the default), uses
 #'   \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
 #'   the \pkg{booktabs} LaTeX package instead of \code{\\hline}.
-#' @param sel_label Character string. Label for the selection equation
-#'   section header. Default is \code{"Selection Equation"}.
-#' @param out_label Character string. Label for the outcome equation
-#'   section header. Default is \code{"Outcome Equation"}.
 #'
 #' @return Invisibly returns the character vector of LaTeX lines; called
 #'   primarily for the side effect of printing via \code{cat}.
 #'
 #' @export
 latex_table <- function(x,
-                        caption   = NULL,
-                        label     = NULL,
-                        align     = NULL,
-                        booktabs  = TRUE,
-                        sel_label = "Selection Equation",
-                        out_label = "Outcome Equation") {
+                        caption  = NULL,
+                        label    = NULL,
+                        align    = NULL,
+                        booktabs = TRUE) {
+  
+  # ---- Unpack SelectPie list if supplied ----
+  if (is.list(x) && all(c("results", "fit_stats") %in% names(x))) {
+    fit_stats <- x$fit_stats
+    x         <- x$results
+  } else {
+    fit_stats <- NULL
+  }
   
   x  <- as.matrix(x)
   nr <- nrow(x)
   nc <- ncol(x)
   
-  split_at = (nrow(x)/2)+2
-  
-  # Default alignment: row-name column left, data columns centred
+  # ---- Default alignment ----
   if (is.null(align)) {
     align <- paste0("l", paste(rep("c", nc), collapse = ""))
+  }
+  
+  # ---- Detect split point from row names ----
+  intercept2_row <- which(rownames(x) == "(Intercept2)")
+  split_at <- if (length(intercept2_row) == 1L) intercept2_row else NULL
+  
+  # ---- Rules ----
+  top_rule <- if (booktabs) "\\toprule"    else "\\hline"
+  mid_rule <- if (booktabs) "\\midrule"    else "\\hline"
+  bot_rule <- if (booktabs) "\\bottomrule" else "\\hline"
+  
+  # ---- Section header helper ----
+  n_cols <- nc + 1L
+  make_section_header <- function(label) {
+    paste0("\\multicolumn{", n_cols, "}{l}{\\textit{", label, "}} \\\\")
   }
   
   # ---- Build LaTeX lines ----
@@ -294,35 +370,41 @@ latex_table <- function(x,
   
   out <- c(out, paste0("\\begin{tabular}{", align, "}"))
   
-  top_rule <- if (booktabs) "\\toprule" else "\\hline"
-  mid_rule <- if (booktabs) "\\midrule" else "\\hline"
-  bot_rule <- if (booktabs) "\\bottomrule" else "\\hline"
-  
   # Header row
   header <- paste(c("", colnames(x)), collapse = " & ")
   out <- c(out, top_rule, paste0(header, " \\\\"), mid_rule)
   
-  # Section header helper: spans all columns with \multicolumn
-  n_cols <- nc + 1L  # +1 for the row-name column
-  make_section_header <- function(label) {
-    paste0("\\multicolumn{", n_cols, "}{l}{\\textit{", label, "}} \\\\")
-  }
-  
-  # ---- Data rows with optional split ----
+  # ---- Data rows ----
   for (i in seq_len(nr)) {
     
-    # Insert selection header before row 1
+    # Selection equation header before row 1
     if (!is.null(split_at) && i == 1L) {
-      out <- c(out, make_section_header(sel_label))
+      out <- c(out, make_section_header("Selection Equation"))
     }
     
-    # Insert midrule + outcome header before split_at row
+    # Outcome equation header at split point
     if (!is.null(split_at) && i == split_at) {
-      out <- c(out, mid_rule, make_section_header(out_label))
+      out <- c(out, mid_rule, make_section_header("Outcome Equation"))
     }
     
     row_i <- paste(c(rownames(x)[i], x[i, ]), collapse = " & ")
     out   <- c(out, paste0(row_i, " \\\\"))
+  }
+  
+  # ---- Fit statistics ----
+  if (!is.null(fit_stats)) {
+    fit_row <- paste(
+      c("",
+        paste0("logLik: ", fit_stats$logLik,
+               " $|$ AIC: ",    fit_stats$AIC,
+               " $|$ BIC: ",    fit_stats$BIC,
+               " $|$ $n$: ",    fit_stats$n)),
+      collapse = " & "
+    )
+    out <- c(out,
+             mid_rule,
+             paste0("\\multicolumn{", n_cols, "}{l}{\\textit{Fit Statistics}} \\\\"),
+             paste0(fit_row, " \\\\"))
   }
   
   out <- c(out, bot_rule, "\\end{tabular}", "\\end{table}")

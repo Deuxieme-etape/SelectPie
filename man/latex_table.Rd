@@ -4,18 +4,11 @@
 \alias{latex_table}
 \title{latex_table}
 \usage{
-latex_table(
-  x,
-  caption = NULL,
-  label = NULL,
-  align = NULL,
-  booktabs = TRUE,
-  sel_label = "Selection Equation",
-  out_label = "Outcome Equation"
-)
+latex_table(x, caption = NULL, label = NULL, align = NULL, booktabs = TRUE)
 }
 \arguments{
-\item{x}{A matrix or object coercible to one via \code{as.matrix}.}
+\item{x}{A SelectPie results list (from \code{\link{SelectPie}}) or a matrix
+coercible via \code{as.matrix}.}
 
 \item{caption}{Character string or \code{NULL}. Table caption.}
 
@@ -23,23 +16,20 @@ latex_table(
 \code{\\ref\{\}} cross-referencing.}
 
 \item{align}{Character string or \code{NULL}. Column alignment
-specification, e.g. \code{"lcccc"}.  Defaults to left-aligning the
+specification, e.g. \code{"lcccc"}. Defaults to left-aligning the
 row-name column and centring all data columns.}
 
 \item{booktabs}{Logical. If \code{TRUE} (the default), uses
 \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
 the \pkg{booktabs} LaTeX package instead of \code{\\hline}.}
-
-\item{sel_label}{Character string. Label for the selection equation
-section header. Default is \code{"Selection Equation"}.}
-
-\item{out_label}{Character string. Label for the outcome equation
-section header. Default is \code{"Outcome Equation"}.}
 }
 \value{
 Invisibly returns the character vector of LaTeX lines; called
   primarily for the side effect of printing via \code{cat}.
 }
 \description{
-Format a matrix or data frame as a LaTeX \code{table} environment.
+Format a SelectPie results list or a matrix as a LaTeX \code{table} environment.
+When passed a SelectPie results list (with \code{results} and \code{fit_stats}),
+the function automatically splits the table at the outcome equation and appends
+fit statistics at the bottom.
 }
