@@ -56,15 +56,10 @@ int_evd_closed <- function(x, y, m) {
   A  <- ex + ey
   V  <- A^(1 / m)
   
-  # Conditional survival contribution at lower limit x = a
   dFdy_a <- exp(-V) * A^(1 / m - 1) * ey
+  fy     <- exp(-y) * exp(-exp(-y))
+  out    <- fy - dFdy_a
   
-  # Gumbel marginal pdf at x = Inf
-  fy <- exp(-y) * exp(-exp(-y))
-  
-  out <- fy - dFdy_a
-  
-  # Numerical guards so log(out) is always finite
   out[!is.finite(out)] <- 0
   out[out < .Machine$double.xmin] <- .Machine$double.xmin
   out
@@ -74,7 +69,8 @@ int_evd_closed <- function(x, y, m) {
 #' SelectPie
 #'
 #' Maximum likelihood estimation for compositional outcome models with
-#' selection into the sample, with optional bootstrapped standard errors.
+#' selection into the sample, with optional bootstrapped standard errors
+#' and predicted log-ratios.
 #'
 #' Supports three estimators: full MLE under the bivariate extreme value
 #' (Gumbel-logistic) copula (\code{distr = "ev"}), full MLE under bivariate
@@ -96,31 +92,29 @@ int_evd_closed <- function(x, y, m) {
 #'   \code{estimator = "heckman"}.
 #' @param estimator Character string. One of \code{"mle"} (default) for full
 #'   maximum likelihood, or \code{"heckman"} for the two-step Heckman
-#'   procedure (probit selection + OLS with inverse Mills ratio correction).
+#'   procedure.
 #' @param method Optimization method passed to \code{\link[stats]{optim}}.
-#'   Default is \code{"BFGS"}. Ignored when \code{estimator = "heckman"}.
-#' @param maxit Integer. Maximum number of iterations passed to
-#'   \code{\link[stats]{optim}}. Default is \code{1000}. Ignored when
-#'   \code{estimator = "heckman"}.
+#'   Default is \code{"BFGS"}.
+#' @param maxit Integer. Maximum number of iterations. Default is \code{1000}.
 #' @param multistart_corr Logical. If \code{TRUE} (the default), the
-#'   optimiser is restarted from two additional starting values for the
-#'   dependence parameter and the best solution is retained. Ignored when
-#'   \code{estimator = "heckman"}.
-#' @param B Integer. Number of bootstrap replications for standard errors.
-#'   Set to \code{0} (default) to return point estimates only.
+#'   optimiser is restarted from two additional starting values.
+#' @param B Integer. Number of bootstrap replications. Set to \code{0}
+#'   (default) to return point estimates only.
 #'
-#' @return A named list with two elements:
+#' @return A named list with three elements:
 #'   \describe{
 #'     \item{results}{A character matrix of point estimates (with significance
 #'       stars when \code{B > 0}) and bootstrapped standard errors in
 #'       parentheses (when \code{B > 0}).}
 #'     \item{fit_stats}{A \code{data.frame} with \code{logLik}, \code{AIC},
-#'       \code{BIC}, \code{n}, and \code{k}. \code{logLik}, \code{AIC}, and
-#'       \code{BIC} are \code{NA} when \code{estimator = "heckman"}.}
+#'       \code{BIC}, \code{n}, and \code{k}.}
+#'     \item{predictions}{A \code{data.frame} with \code{log_ratio} (point
+#'       estimates of \eqn{X_2 \hat\beta_2}) and, when \code{B > 0},
+#'       \code{log_ratio_se} (bootstrap standard errors).}
 #'   }
 #'
 #' @seealso \code{\link{int_evd_closed}}, \code{\link{cdfevd}},
-#'   \code{\link{latex_table}}
+#'   \code{\link{compose_shares}}, \code{\link{latex_table}}
 #'
 #' @export
 SelectPie <- function(data, y1, x1, y2, x2,
@@ -150,13 +144,11 @@ SelectPie <- function(data, y1, x1, y2, x2,
     
     # ---- Heckman two-step ----
     if (estimator == "heckman") {
-      
       probit_fit <- stats::glm(
         stats::reformulate(x1, response = y1),
         family = stats::binomial(link = "probit"),
         data   = data
       )
-      
       xb_probit     <- as.vector(X1 %*% stats::coef(probit_fit))
       imr           <- stats::dnorm(xb_probit) / stats::pnorm(xb_probit)
       data$.__imr__ <- y1v * imr
@@ -165,7 +157,6 @@ SelectPie <- function(data, y1, x1, y2, x2,
         stats::reformulate(c(x2, ".__imr__"), response = y2),
         data = data[idx_sel, ]
       )
-      
       return(c(stats::coef(probit_fit), stats::coef(outcome_fit)))
     }
     
@@ -177,21 +168,17 @@ SelectPie <- function(data, y1, x1, y2, x2,
     if (distr == "ev") {
       
       if (length(unique(y1v)) == 1L) {
-        corr_initial <- -2
-        para0 <- c(rep(0, p1), b2, corr_initial)
+        para0 <- c(rep(0, p1), b2, -2)
       } else {
         OLSStage1 <- stats::lm.fit(X1, y1v)
         b1 <- stats::coef(OLSStage1)
         b1[is.na(b1)] <- 0
-        
         r <- suppressWarnings(
           stats::cor(OLSStage2$residuals, OLSStage1$residuals[idx_sel])
         )
         if (!is.finite(r)) r <- 0
-        
         corr_initial <- log(1 / (1 - abs(r)) - 1)
         corr_initial <- max(min(corr_initial, 2), -2)
-        
         para0 <- c(b1, b2, corr_initial)
       }
       
@@ -203,17 +190,14 @@ SelectPie <- function(data, y1, x1, y2, x2,
         OLSStage1 <- stats::lm.fit(X1, y1v)
         b1 <- stats::coef(OLSStage1)
         b1[is.na(b1)] <- 0
-        
         r <- suppressWarnings(
           stats::cor(OLSStage2$residuals, OLSStage1$residuals[idx_sel])
         )
         if (!is.finite(r)) r <- 0
-        
         r         <- max(min(r, 0.95), -0.95)
         rho0      <- log((r + 1) / (1 - r))
         sigma0    <- max(stats::sd(OLSStage2$residuals, na.rm = TRUE), 1e-4)
         logsigma0 <- if (is.finite(log(sigma0))) log(sigma0) else 0
-        
         para0 <- c(b1, b2, rho0, logsigma0)
       }
     }
@@ -228,36 +212,27 @@ SelectPie <- function(data, y1, x1, y2, x2,
       u   <- y2v - xb2
       
       if (distr == "ev") {
-        
-        m <- exp(para[length(para)]) + 1
-        
+        m     <- exp(para[length(para)]) + 1
         x1s   <- xb1 - digamma(1)
         logF1 <- -exp(-x1s)
         obj1  <- (1 - y1v) * logF1
         obj1[obj1 < -600] <- -600
-        
         integ <- int_evd_closed(xb1, u, m)
         logI  <- log(integ)
         logI[logI < -600] <- -600
         obj2  <- y1v * logI
         
       } else if (distr == "normal") {
-        
         rho   <- 2 / (1 + exp(-para[length(para) - 1L])) - 1
         sigma <- exp(para[length(para)])
-        
         logF1 <- stats::pnorm(xb1, log.p = TRUE)
         obj1  <- (1 - y1v) * logF1
         obj1[obj1 < -600] <- -600
-        
-        z <- u / sigma
-        
+        z                     <- u / sigma
         log_density_u         <- stats::dnorm(z, log = TRUE) - log(sigma)
         log_selection_given_u <- stats::pnorm(
-          (-xb1 + rho * z) / sqrt(1 - rho^2),
-          log.p = TRUE
+          (-xb1 + rho * z) / sqrt(1 - rho^2), log.p = TRUE
         )
-        
         logI <- log_density_u + log_selection_given_u
         logI[logI < -600] <- -600
         obj2 <- y1v * logI
@@ -288,15 +263,27 @@ SelectPie <- function(data, y1, x1, y2, x2,
     
     # ---- Back-transform parameters ----
     out <- res$par
-    
     if (distr == "ev") {
-      out[length(out)] <- 1 - 1 / (1 + exp(out[length(out)]))  # rho
+      out[length(out)] <- 1 - 1 / (1 + exp(out[length(out)]))
     } else if (distr == "normal") {
-      out[length(out) - 1L] <- 2 / (1 + exp(-out[length(out) - 1L])) - 1  # rho
-      out <- out[-length(out)]  # drop log-sigma (nuisance parameter)
+      out[length(out) - 1L] <- 2 / (1 + exp(-out[length(out) - 1L])) - 1
+      out <- out[-length(out)]
     }
-    
     out
+  }
+  
+  # ---- Internal: extract beta2 from parameter vector ----
+  .get_beta2 <- function(par) {
+    par[(length(par) - length(x2) - 1L):(length(par) - 1L)]
+  }
+  
+  # ---- Internal: predicted log-ratios from original data ----
+  .predict_lr <- function(par) {
+    X2_full <- stats::model.matrix(
+      stats::reformulate(x2, response = NULL), data = data
+    )
+    beta2 <- .get_beta2(par)
+    as.vector(X2_full %*% beta2)
   }
   
   # ---- Internal fit statistics ----
@@ -305,15 +292,9 @@ SelectPie <- function(data, y1, x1, y2, x2,
     n_obs    <- sum(!is.na(data[[y1]]))
     n_params <- length(point_est)
     
-    # Heckman two-step: no likelihood available
     if (estimator == "heckman") {
-      return(data.frame(
-        logLik = NA_real_,
-        AIC    = NA_real_,
-        BIC    = NA_real_,
-        n      = n_obs,
-        k      = n_params
-      ))
+      return(data.frame(logLik = NA_real_, AIC = NA_real_,
+                        BIC = NA_real_, n = n_obs, k = n_params))
     }
     
     k1 <- length(x1) + 1L
@@ -338,31 +319,23 @@ SelectPie <- function(data, y1, x1, y2, x2,
     not_observed <- y1v == 0
     
     if (distr == "ev") {
-      
-      # Recover dependence parameter from back-transformed rho
       m <- 1 / (1 - rho)
-      
       x1s <- xb1 - digamma(1)
       ll[not_observed] <- -exp(-x1s[not_observed])
-      
       integ <- int_evd_closed(xb1[observed], u[observed], m)
       ll[observed] <- log(pmax(integ, .Machine$double.xmin))
       
     } else if (distr == "normal") {
-      
       ll[not_observed] <- stats::pnorm(xb1[not_observed], log.p = TRUE)
-      
       z                     <- u[observed]
       log_density_u         <- stats::dnorm(z, log = TRUE)
       log_selection_given_u <- stats::pnorm(
-        (-xb1[observed] + rho * z) / sqrt(1 - rho^2),
-        log.p = TRUE
+        (-xb1[observed] + rho * z) / sqrt(1 - rho^2), log.p = TRUE
       )
       ll[observed] <- log_density_u + log_selection_given_u
     }
     
     logLik_val <- sum(ll, na.rm = TRUE)
-    
     data.frame(
       logLik = round(logLik_val,                               3),
       AIC    = round(-2 * logLik_val + 2 * n_params,          3),
@@ -376,35 +349,45 @@ SelectPie <- function(data, y1, x1, y2, x2,
   point_est <- .fit(data)
   fit_stats <- .fit_stats(point_est)
   
-  # ---- Row names for output matrix ----
-  last_term <- if (estimator == "heckman") "IMR" else "Corr."
+  # ---- Point estimate log-ratios ----
+  lr_point <- .predict_lr(point_est)
   
+  # ---- Row names for results matrix ----
+  last_term <- if (estimator == "heckman") "IMR" else "Corr."
   x1_full   <- as.vector(rbind(c("(Intercept1)", x1), ""))
   x2_full   <- as.vector(rbind(c("(Intercept2)", x2, last_term), ""))
   row_names <- c(x1_full, x2_full)
+  k         <- length(x1) + length(x2) + 3
   
-  k <- length(x1) + length(x2) + 3  # both intercepts + Corr. or IMR
-  
-  # ---- Bootstrap (only if B > 0) ----
+  # ---- Bootstrap ----
   if (B > 0) {
     n     <- nrow(data)
     index <- seq_len(n)
     
-    boot_ests <- matrix(NA, nrow = B, ncol = k)
+    boot_ests <- matrix(NA_real_, nrow = B, ncol = k)
+    boot_lr   <- matrix(NA_real_, nrow = B, ncol = n)  # predictions per draw
     
     for (b in seq_len(B)) {
-      sample_index   <- sample(index, n, replace = TRUE)
-      bootstrap_data <- data[sample_index, ]
+      boot_result <- tryCatch({
+        sample_idx     <- sample(index, n, replace = TRUE)
+        bootstrap_data <- data[sample_idx, ]
+        par_b          <- .fit(bootstrap_data)
+        
+        list(
+          coefs = par_b,
+          lr    = .predict_lr(par_b)  # predicted on ORIGINAL data
+        )
+      }, error = function(e) list(coefs = rep(NA_real_, k),
+                                  lr    = rep(NA_real_, n)))
       
-      boot_ests[b, ] <- tryCatch(
-        .fit(bootstrap_data),
-        error = function(e) rep(NA_real_, k)
-      )
+      boot_ests[b, ] <- boot_result$coefs
+      boot_lr[b, ]   <- boot_result$lr
     }
     
-    boot_se <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
+    boot_se    <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
+    boot_lr_se <- apply(boot_lr,   2, stats::sd, na.rm = TRUE)
     
-    # ---- Format estimates with significance stars and SEs in parentheses ----
+    # ---- Format results matrix ----
     results <- matrix(NA_character_, nrow = 2 * k, ncol = 1,
                       dimnames = list(row_names, y1))
     
@@ -413,55 +396,56 @@ SelectPie <- function(data, y1, x1, y2, x2,
       se    <- boot_se[r]
       tstat <- abs(est / se)
       
-      stars <- if (tstat > 2.575) {
-        "$^{***}$"
-      } else if (tstat > 1.96) {
-        "$^{**}$"
-      } else if (tstat > 1.645) {
-        "$^{*}$"
-      } else {
-        ""
-      }
+      stars <- if (tstat > 2.575) "$^{***}$" else
+        if (tstat > 1.96)  "$^{**}$"  else
+          if (tstat > 1.645) "$^{*}$"   else ""
       
       results[2 * r - 1, 1] <- paste0(round(est, 3), stars)
       results[2 * r,     1] <- paste0("(", round(se, 3), ")")
     }
     
+    predictions <- data.frame(
+      log_ratio    = lr_point,
+      log_ratio_se = boot_lr_se
+    )
+    
   } else {
     
-    # No bootstrap — return rounded point estimates only
+    # No bootstrap — point estimates only
     results <- matrix(round(point_est, 3), nrow = k, ncol = 1,
                       dimnames = list(row_names[c(TRUE, FALSE)], y1))
+    
+    predictions <- data.frame(
+      log_ratio = lr_point
+    )
   }
   
   list(
-    results   = results,
-    fit_stats = fit_stats
+    results     = results,
+    fit_stats   = fit_stats,
+    predictions = predictions
   )
 }
 
 
 #' latex_table
 #'
-#' Format a SelectPie results list or a matrix as a LaTeX \code{table} environment.
-#' When passed a SelectPie results list (with \code{results} and \code{fit_stats}),
-#' the function automatically splits the table at the outcome equation and appends
+#' Format a SelectPie results list or a matrix as a LaTeX \code{table}
+#' environment. When passed a SelectPie results list, the function
+#' automatically splits the table at the outcome equation and appends
 #' fit statistics at the bottom.
 #'
-#' @param x A SelectPie results list (from \code{\link{SelectPie}}) or a matrix
-#'   coercible via \code{as.matrix}.
+#' @param x A SelectPie results list (from \code{\link{SelectPie}}) or a
+#'   matrix coercible via \code{as.matrix}.
 #' @param caption Character string or \code{NULL}. Table caption.
-#' @param label Character string or \code{NULL}. LaTeX label for
-#'   \code{\\ref\{\}} cross-referencing.
+#' @param label Character string or \code{NULL}. LaTeX label.
 #' @param align Character string or \code{NULL}. Column alignment
-#'   specification, e.g. \code{"lcccc"}. Defaults to left-aligning the
-#'   row-name column and centring all data columns.
+#'   specification. Defaults to left-aligning the row-name column and
+#'   centring all data columns.
 #' @param booktabs Logical. If \code{TRUE} (the default), uses
-#'   \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
-#'   the \pkg{booktabs} LaTeX package instead of \code{\\hline}.
+#'   \code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule}.
 #'
-#' @return Invisibly returns the character vector of LaTeX lines; called
-#'   primarily for the side effect of printing via \code{cat}.
+#' @return Invisibly returns the character vector of LaTeX lines.
 #'
 #' @export
 latex_table <- function(x,
@@ -470,7 +454,7 @@ latex_table <- function(x,
                         align    = NULL,
                         booktabs = TRUE) {
   
-  # ---- Unpack SelectPie list if supplied ----
+  # ---- Unpack SelectPie list ----
   if (is.list(x) && all(c("results", "fit_stats") %in% names(x))) {
     fit_stats <- x$fit_stats
     x         <- x$results
@@ -482,83 +466,53 @@ latex_table <- function(x,
   nr <- nrow(x)
   nc <- ncol(x)
   
-  # ---- Default alignment ----
   if (is.null(align)) {
     align <- paste0("l", paste(rep("c", nc), collapse = ""))
   }
   
-  # ---- Detect split point from row names ----
   intercept2_row <- which(rownames(x) == "(Intercept2)")
   split_at       <- if (length(intercept2_row) == 1L) intercept2_row else NULL
   
-  # ---- Rules ----
   top_rule <- if (booktabs) "\\toprule"    else "\\hline"
   mid_rule <- if (booktabs) "\\midrule"    else "\\hline"
   bot_rule <- if (booktabs) "\\bottomrule" else "\\hline"
   
-  # ---- Section header helper ----
   n_cols <- nc + 1L
   make_section_header <- function(label) {
     paste0("\\multicolumn{", n_cols, "}{l}{\\textit{", label, "}} \\\\")
   }
   
-  # ---- Build LaTeX lines ----
   out <- c("\\begin{table}[!htbp]", "\\centering")
-  
-  if (!is.null(caption)) {
-    out <- c(out, paste0("\\caption{", caption, "}"))
-  }
-  if (!is.null(label)) {
-    out <- c(out, paste0("\\label{", label, "}"))
-  }
-  
+  if (!is.null(caption)) out <- c(out, paste0("\\caption{", caption, "}"))
+  if (!is.null(label))   out <- c(out, paste0("\\label{",   label,   "}"))
   out <- c(out, paste0("\\begin{tabular}{", align, "}"))
   
-  # Header row
   header <- paste(c("", colnames(x)), collapse = " & ")
   out <- c(out, top_rule, paste0(header, " \\\\"), mid_rule)
   
-  # ---- Data rows ----
   for (i in seq_len(nr)) {
-    
-    # Selection equation header before row 1
-    if (!is.null(split_at) && i == 1L) {
+    if (!is.null(split_at) && i == 1L)
       out <- c(out, make_section_header("Selection Equation"))
-    }
-    
-    # Outcome equation header at split point
-    if (!is.null(split_at) && i == split_at) {
+    if (!is.null(split_at) && i == split_at)
       out <- c(out, mid_rule, make_section_header("Outcome Equation"))
-    }
-    
     row_i <- paste(c(rownames(x)[i], x[i, ]), collapse = " & ")
     out   <- c(out, paste0(row_i, " \\\\"))
   }
   
-  # ---- Fit statistics ----
   if (!is.null(fit_stats)) {
-    
-    # Display NA fit stats as dashes (e.g. Heckman two-step)
     fmt <- function(val) if (is.na(val)) "---" else as.character(val)
-    
     fit_row <- paste(
-      c("",
-        paste0("logLik: ", fmt(fit_stats$logLik),
-               " $|$ AIC: ", fmt(fit_stats$AIC),
-               " $|$ BIC: ", fmt(fit_stats$BIC),
-               " $|$ $n$: ", fit_stats$n)),
+      c("", paste0("logLik: ", fmt(fit_stats$logLik),
+                   " $|$ AIC: ", fmt(fit_stats$AIC),
+                   " $|$ BIC: ", fmt(fit_stats$BIC),
+                   " $|$ $n$: ", fit_stats$n)),
       collapse = " & "
     )
-    
-    out <- c(out,
-             mid_rule,
-             make_section_header("Fit Statistics"),
+    out <- c(out, mid_rule, make_section_header("Fit Statistics"),
              paste0(fit_row, " \\\\"))
   }
   
   out <- c(out, bot_rule, "\\end{tabular}", "\\end{table}")
-  
-  # Remove underscores so variable names compile cleanly in LaTeX
   out <- gsub("_", " ", out)
   
   cat(paste(out, collapse = "\n"))
@@ -566,145 +520,117 @@ latex_table <- function(x,
 }
 
 
-
-
-#' predict_SelectPie
-#'
-#' Compute predicted log-ratios from the outcome equation of a fitted
-#' \code{SelectPie} model.
-#'
-#' Returns the linear predictor \eqn{X_2 \hat{\beta}_2} for each observation,
-#' along with a participation indicator copied from \code{y1}. Vote shares
-#' require log-ratios from all modeled categories simultaneously; use
-#' \code{\link{compose_shares}} to combine predictions across categories and
-#' recover shares.
-#'
-#' @param data A \code{data.frame} containing all variables used in the
-#'   outcome equation.
-#' @param result A SelectPie results list as returned by
-#'   \code{\link{SelectPie}}.
-#' @param x2 Character vector of regressor names for the outcome equation
-#'   (must match those supplied to \code{\link{SelectPie}}).
-#' @param y1 Character string. Name of the binary selection/participation
-#'   indicator in \code{data}.
-#'
-#' @return A \code{data.frame} with two columns:
-#'   \describe{
-#'     \item{log_ratio}{Predicted log-ratio \eqn{X_2 \hat{\beta}_2} for each
-#'       observation.}
-#'     \item{participated}{Integer (0/1) participation indicator copied from
-#'       \code{y1}. Can be used to flag counterfactual predictions for
-#'       non-participating units.}
-#'   }
-#'
-#' @seealso \code{\link{SelectPie}}, \code{\link{compose_shares}}
-#'
-#' @export
-predict_SelectPie <- function(data, result, x2, y1) {
-  
-  # ---- Extract point estimates from results list ----
-  # When B > 0 results is a character matrix (estimates + stars);
-  # we need the raw numeric point estimates from the odd rows only.
-  raw <- result$results
-  raw <- raw[c(TRUE, FALSE), , drop = FALSE]  # keep estimate rows, drop SE rows
-  
-  # Strip significance stars and convert to numeric
-  clean <- gsub("\\$\\^\\{\\*+\\}\\$", "", raw[, 1])
-  coefs <- as.numeric(clean)
-  names(coefs) <- rownames(raw)
-  
-  # ---- Extract outcome equation coefficients by name ----
-  # Outcome coefficients are prefixed with "outcome_" in the named vector
-  outcome_names <- paste0("outcome_", c("(Intercept)", x2))
-  beta2 <- coefs[outcome_names]
-  
-  if (any(is.na(beta2))) {
-    missing <- outcome_names[is.na(beta2)]
-    stop("Could not find outcome coefficients for: ",
-         paste(missing, collapse = ", "),
-         ". Check that x2 matches the variables used in SelectPie().")
-  }
-  
-  # ---- Build design matrix and compute log-ratios ----
-  X2 <- stats::model.matrix(stats::reformulate(x2, response = NULL), data = data)
-  log_ratio <- as.vector(X2 %*% beta2)
-  
-  # ---- Return log-ratios and participation indicator ----
-  data.frame(
-    log_ratio    = log_ratio,
-    participated = as.integer(data[[y1]])
-  )
-}
-
-
 #' compose_shares
 #'
-#' Convert predicted log-ratios from multiple \code{\link{predict_SelectPie}}
-#' calls into compositional vote shares using the additive log-ratio (ALR)
-#' inverse transformation.
+#' Convert predicted log-ratios from multiple \code{\link{SelectPie}} objects
+#' into compositional vote shares using the additive log-ratio (ALR) inverse
+#' transformation. Propagates uncertainty via the delta method when bootstrap
+#' standard errors are available.
 #'
-#' The reference category (e.g. the dominant party whose vote share is not
-#' modelled directly) receives the residual share
+#' The reference category receives the residual share
 #' \eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each modelled category receives
 #' \eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
 #'
-#' @param predictions A named list of \code{data.frame}s, each as returned by
-#'   \code{\link{predict_SelectPie}}. Names identify the categories (e.g.
-#'   \code{list(labour = lr_lab, libdem = lr_ld, ...)}).
-#' @param reference Character string. Name to use for the reference category
-#'   column in the output. Default is \code{"reference"}.
+#' Standard errors for each share are approximated via the delta method:
+#' \deqn{
+#'   \mathrm{SE}(\hat{s}_j) \approx \sqrt{
+#'     \hat{s}_j^2 (1 - \hat{s}_j)^2 \, \mathrm{SE}(\ell_j)^2 +
+#'     \sum_{k \neq j} \hat{s}_j^2 \hat{s}_k^2 \, \mathrm{SE}(\ell_k)^2
+#'   }
+#' }
 #'
-#' @return A \code{data.frame} with one column per modelled category (named
-#'   after the list elements in \code{predictions}), one column for the
-#'   reference category (named by \code{reference}), and one
-#'   \code{participated} column per category (named
-#'   \code{<category>_participated}) indicating observed participation.
+#' @param models A named list of SelectPie results lists as returned by
+#'   \code{\link{SelectPie}}. Names identify the categories.
+#' @param reference Character string. Name for the reference category column.
+#'   Default is \code{"reference"}.
 #'
-#' @seealso \code{\link{SelectPie}}, \code{\link{predict_SelectPie}}
+#' @return A \code{data.frame} with one share column per modelled category,
+#'   one share column for the reference category, and (when bootstrap SEs are
+#'   available in all supplied models) one \code{_se} column per category
+#'   containing delta-method standard errors.
+#'
+#' @seealso \code{\link{SelectPie}}, \code{\link{simulate_shock}}
 #'
 #' @export
-compose_shares <- function(predictions, reference = "reference") {
+compose_shares <- function(models, reference = "reference") {
   
-  # ---- Validate input ----
-  if (!is.list(predictions) || is.null(names(predictions))) {
-    stop("predictions must be a named list of predict_SelectPie() outputs.")
+  if (!is.list(models) || is.null(names(models))) {
+    stop("models must be a named list of SelectPie result objects.")
   }
   
-  n_obs    <- nrow(predictions[[1]])
-  n_cats   <- length(predictions)
-  cat_names <- names(predictions)
+  # Validate all elements are SelectPie lists
+  for (nm in names(models)) {
+    if (!all(c("results", "fit_stats", "predictions") %in% names(models[[nm]]))) {
+      stop("'", nm, "' does not appear to be a SelectPie results list.")
+    }
+  }
   
-  # Check all predictions have the same number of rows
-  lens <- vapply(predictions, nrow, integer(1))
+  cat_names <- names(models)
+  n_obs     <- nrow(models[[1]]$predictions)
+  
+  # Check all models have the same number of observations
+  lens <- vapply(models, function(m) nrow(m$predictions), integer(1))
   if (any(lens != n_obs)) {
-    stop("All elements of predictions must have the same number of rows.")
+    stop("All models must have the same number of observations in $predictions.")
   }
   
-  # ---- Extract log-ratio matrix ----
-  lr_matrix <- matrix(NA_real_, nrow = n_obs, ncol = n_cats,
+  # ---- Extract log-ratios and SEs ----
+  has_se <- all(vapply(models,
+                       function(m) "log_ratio_se" %in% names(m$predictions),
+                       logical(1)))
+  
+  lr_matrix <- matrix(NA_real_, nrow = n_obs, ncol = length(cat_names),
                       dimnames = list(NULL, cat_names))
-  
-  for (cat in cat_names) {
-    lr_matrix[, cat] <- predictions[[cat]]$log_ratio
+  for (nm in cat_names) {
+    lr_matrix[, nm] <- models[[nm]]$predictions$log_ratio
   }
+  
+  se_matrix <- if (has_se) {
+    m <- matrix(NA_real_, nrow = n_obs, ncol = length(cat_names),
+                dimnames = list(NULL, cat_names))
+    for (nm in cat_names) m[, nm] <- models[[nm]]$predictions$log_ratio_se
+    m
+  } else NULL
   
   # ---- ALR inverse transformation ----
-  exp_lr    <- exp(lr_matrix)
-  denom     <- 1 + rowSums(exp_lr)
+  exp_lr <- exp(lr_matrix)
+  denom  <- 1 + rowSums(exp_lr)
   
   share_matrix <- exp_lr / denom
   ref_share    <- 1 / denom
   
-  # ---- Assemble output data frame ----
+  # ---- Assemble output ----
   out <- as.data.frame(share_matrix)
   colnames(out) <- cat_names
-  
-  # Reference category share
   out[[reference]] <- ref_share
   
-  # Participation indicators — one per category
-  for (cat in cat_names) {
-    out[[paste0(cat, "_participated")]] <- predictions[[cat]]$participated
+  # ---- Delta method SEs ----
+  if (has_se) {
+    
+    all_cats  <- c(cat_names, reference)
+    all_shares <- cbind(share_matrix, ref_share)
+    colnames(all_shares) <- all_cats
+    
+    for (j in all_cats) {
+      sj <- all_shares[, j]
+      
+      # Variance contribution from each modelled log-ratio
+      var_j <- rep(0, n_obs)
+      for (nm in cat_names) {
+        sk <- all_shares[, nm]
+        se_k <- se_matrix[, nm]
+        
+        if (j == nm) {
+          # Own derivative: d(s_j)/d(lr_j) = s_j * (1 - s_j)
+          var_j <- var_j + (sj * (1 - sj))^2 * se_k^2
+        } else {
+          # Cross derivative: d(s_j)/d(lr_k) = -s_j * s_k
+          var_j <- var_j + (sj * sk)^2 * se_k^2
+        }
+      }
+      
+      out[[paste0(j, "_se")]] <- sqrt(var_j)
+    }
   }
   
   out
@@ -717,63 +643,29 @@ compose_shares <- function(predictions, reference = "reference") {
 #' on compositional vote shares, with uncertainty quantified via a
 #' nonparametric bootstrap that re-estimates all models on each draw.
 #'
-#' On each bootstrap draw the function:
-#' \enumerate{
-#'   \item Resamples the data with replacement.
-#'   \item Re-estimates all party models via \code{\link{SelectPie}} with
-#'     \code{B = 0} (point estimates only).
-#'   \item Predicts log-ratios twice on the \emph{original} data — once at
-#'     the observed values of \code{shock_var} (baseline) and once with
-#'     \code{shock_var} increased by \code{shock_sd} standard deviations
-#'     (shocked).
-#'   \item Converts both sets of log-ratios to vote shares via the ALR
-#'     inverse transformation (\code{\link{compose_shares}}).
-#'   \item Records the mean difference (shocked minus baseline) across
-#'     observations for each category and the reference category.
-#' }
-#' After all draws, the function summarises the bootstrap distribution of
-#' mean differences (mean, SD, and a 95\% interval).
-#'
 #' @param data A \code{data.frame} containing all variables.
 #' @param models A named list of model specifications, one per modelled
-#'   category. Each element must be a list with named character elements:
-#'   \code{y1} (selection indicator), \code{x1} (selection regressors),
-#'   \code{y2} (outcome variable), and \code{x2} (outcome regressors).
-#'   The names of the outer list become the category names in the output
-#'   (e.g. \code{list(libdem = list(y1 = ..., x1 = ..., y2 = ..., x2 = ...))}).
-#' @param shock_var Character string. Name of the variable in \code{data}
-#'   to shock.
-#' @param shock_sd Numeric. Number of standard deviations to add to
-#'   \code{shock_var}. Default is \code{1}.
-#' @param reference Character string. Name to use for the reference
-#'   category in the output. Default is \code{"reference"}.
+#'   category. Each element must be a list with named elements:
+#'   \code{y1}, \code{x1}, \code{y2}, and \code{x2}.
+#' @param shock_var Character string. Name of the variable to shock.
+#' @param shock_sd Numeric. Number of standard deviations to add. Default
+#'   is \code{1}.
+#' @param reference Character string. Name for the reference category.
+#'   Default is \code{"reference"}.
 #' @param B Integer. Number of bootstrap draws. Default is \code{1000}.
 #' @param distr Character string. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{"ev"}.
 #' @param estimator Character string. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{"mle"}.
 #' @param method Character string. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{"BFGS"}.
 #' @param maxit Integer. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{1000}.
 #' @param multistart_corr Logical. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{TRUE}.
-#' @param seed Integer or \code{NULL}. Random seed for reproducibility.
-#'   Default is \code{NULL}.
+#' @param seed Integer or \code{NULL}. Random seed. Default is \code{NULL}.
 #'
-#' @return A \code{data.frame} with one row per category (modelled
-#'   categories plus the reference) and columns:
-#'   \describe{
-#'     \item{category}{Category name.}
-#'     \item{mean}{Mean of the bootstrap distribution of average differences
-#'       (shocked minus baseline vote share).}
-#'     \item{sd}{Standard deviation of the bootstrap distribution.}
-#'     \item{lb}{Lower bound of the 95\% bootstrap interval (mean - 1.96*sd).}
-#'     \item{ub}{Upper bound of the 95\% bootstrap interval (mean + 1.96*sd).}
-#'   }
+#' @return A \code{data.frame} with columns \code{category}, \code{mean},
+#'   \code{sd}, \code{lb}, and \code{ub} summarising the bootstrap
+#'   distribution of average differences (shocked minus baseline) for each
+#'   category.
 #'
-#' @seealso \code{\link{SelectPie}}, \code{\link{predict_SelectPie}},
-#'   \code{\link{compose_shares}}
+#' @seealso \code{\link{SelectPie}}, \code{\link{compose_shares}}
 #'
 #' @export
 simulate_shock <- function(data,
@@ -789,122 +681,99 @@ simulate_shock <- function(data,
                            multistart_corr = TRUE,
                            seed            = NULL) {
   
-  # ---- Input checks ----
-  if (!is.list(models) || is.null(names(models))) {
+  if (!is.list(models) || is.null(names(models)))
     stop("models must be a named list of model specifications.")
-  }
-  required_fields <- c("y1", "x1", "y2", "x2")
+  
   for (nm in names(models)) {
-    missing_fields <- setdiff(required_fields, names(models[[nm]]))
-    if (length(missing_fields) > 0) {
-      stop("Model '", nm, "' is missing required fields: ",
-           paste(missing_fields, collapse = ", "))
-    }
+    missing_fields <- setdiff(c("y1", "x1", "y2", "x2"), names(models[[nm]]))
+    if (length(missing_fields) > 0)
+      stop("Model '", nm, "' is missing: ", paste(missing_fields, collapse = ", "))
   }
-  if (!shock_var %in% names(data)) {
+  
+  if (!shock_var %in% names(data))
     stop("shock_var '", shock_var, "' not found in data.")
-  }
   
   if (!is.null(seed)) set.seed(seed)
   
-  cat_names <- names(models)
-  all_cats  <- c(cat_names, reference)
-  n_obs     <- nrow(data)
-  index     <- seq_len(n_obs)
+  cat_names  <- names(models)
+  all_cats   <- c(cat_names, reference)
+  n_obs      <- nrow(data)
+  index      <- seq_len(n_obs)
   
-  # ---- Shocked data (applied to original data, not resampled) ----
-  shock_size          <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
-  data_shocked        <- data
+  shock_size        <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
+  data_shocked      <- data
   data_shocked[[shock_var]] <- data_shocked[[shock_var]] + shock_size
   
-  # ---- Storage: one mean difference per bootstrap draw per category ----
-  boot_diffs <- matrix(NA_real_,
-                       nrow = B,
-                       ncol = length(all_cats),
+  boot_diffs <- matrix(NA_real_, nrow = B, ncol = length(all_cats),
                        dimnames = list(NULL, all_cats))
   
-  # ---- Bootstrap loop ----
   for (b in seq_len(B)) {
     
-    if (b %% 100 == 0) {
-      message("Bootstrap draw ", b, " of ", B)
-    }
+    if (b %% 100 == 0) message("Bootstrap draw ", b, " of ", B)
     
     result <- tryCatch({
       
-      # Resample with replacement
       sample_idx     <- sample(index, n_obs, replace = TRUE)
       bootstrap_data <- data[sample_idx, ]
       
-      # Re-estimate all party models on bootstrap data
-      fitted_models <- vector("list", length(cat_names))
-      names(fitted_models) <- cat_names
-      
-      for (nm in cat_names) {
+      # Re-estimate all models on bootstrap data
+      fitted <- lapply(cat_names, function(nm) {
         spec <- models[[nm]]
-        fitted_models[[nm]] <- SelectPie(
-          data            = bootstrap_data,
-          y1              = spec$y1,
-          x1              = spec$x1,
-          y2              = spec$y2,
-          x2              = spec$x2,
-          distr           = distr,
-          estimator       = estimator,
-          method          = method,
-          maxit           = maxit,
-          multistart_corr = multistart_corr,
-          B               = 0  # point estimates only inside simulation
+        SelectPie(data            = bootstrap_data,
+                  y1              = spec$y1,
+                  x1              = spec$x1,
+                  y2              = spec$y2,
+                  x2              = spec$x2,
+                  distr           = distr,
+                  estimator       = estimator,
+                  method          = method,
+                  maxit           = maxit,
+                  multistart_corr = multistart_corr,
+                  B               = 0)
+      })
+      names(fitted) <- cat_names
+      
+      # Baseline shares on original data
+      shares_base    <- compose_shares(fitted, reference = reference)
+      
+      # Shocked shares — temporarily replace predictions
+      fitted_shocked <- lapply(cat_names, function(nm) {
+        spec   <- models[[nm]]
+        fit_nm <- fitted[[nm]]
+        X2_s   <- stats::model.matrix(
+          stats::reformulate(spec$x2, response = NULL), data = data_shocked
         )
-      }
-      
-      # ---- Baseline predictions on original data ----
-      lr_baseline <- lapply(cat_names, function(nm) {
-        spec <- models[[nm]]
-        predict_SelectPie(data    = data,
-                          result  = fitted_models[[nm]],
-                          x2      = spec$x2,
-                          y1      = spec$y1)
+        par      <- fit_nm$results[c(TRUE, FALSE), , drop = FALSE]
+        par_num  <- as.numeric(gsub("\\$\\^\\{\\*+\\}\\$", "", par[, 1]))
+        beta2    <- par_num[(length(par_num) - length(spec$x2) - 1L):
+                              (length(par_num) - 1L)]
+        fit_nm$predictions$log_ratio <- as.vector(X2_s %*% beta2)
+        fit_nm
       })
-      names(lr_baseline) <- cat_names
+      names(fitted_shocked) <- cat_names
       
-      shares_baseline <- compose_shares(lr_baseline, reference = reference)
+      shares_shock <- compose_shares(fitted_shocked, reference = reference)
       
-      # ---- Shocked predictions on shocked data ----
-      lr_shocked <- lapply(cat_names, function(nm) {
-        spec <- models[[nm]]
-        predict_SelectPie(data    = data_shocked,
-                          result  = fitted_models[[nm]],
-                          x2      = spec$x2,
-                          y1      = spec$y1)
-      })
-      names(lr_shocked) <- cat_names
-      
-      shares_shocked <- compose_shares(lr_shocked, reference = reference)
-      
-      # ---- Mean difference across observations (shocked - baseline) ----
-      diff_means <- vapply(all_cats, function(cat) {
-        mean(shares_shocked[[cat]] - shares_baseline[[cat]], na.rm = TRUE)
+      # Mean difference across observations
+      vapply(all_cats, function(cat) {
+        mean(shares_shock[[cat]] - shares_base[[cat]], na.rm = TRUE)
       }, numeric(1))
-      
-      diff_means
       
     }, error = function(e) rep(NA_real_, length(all_cats)))
     
     boot_diffs[b, ] <- result
   }
   
-  # ---- Remove failed draws ----
   n_failed <- sum(rowSums(is.na(boot_diffs)) > 0)
   if (n_failed > 0) {
     message(n_failed, " bootstrap draw(s) failed and were excluded.")
     boot_diffs <- boot_diffs[rowSums(is.na(boot_diffs)) == 0, , drop = FALSE]
   }
   
-  # ---- Summarise bootstrap distribution ----
   means <- apply(boot_diffs, 2, mean, na.rm = TRUE)
   sds   <- apply(boot_diffs, 2, stats::sd, na.rm = TRUE)
   
-  results <- data.frame(
+  data.frame(
     category = all_cats,
     mean     = round(means, 6),
     sd       = round(sds,   6),
@@ -912,6 +781,4 @@ simulate_shock <- function(data,
     ub       = round(means + 1.96 * sds, 6),
     row.names = NULL
   )
-  
-  results
 }

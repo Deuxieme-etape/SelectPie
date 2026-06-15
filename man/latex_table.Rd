@@ -7,29 +7,26 @@
 latex_table(x, caption = NULL, label = NULL, align = NULL, booktabs = TRUE)
 }
 \arguments{
-\item{x}{A SelectPie results list (from \code{\link{SelectPie}}) or a matrix
-coercible via \code{as.matrix}.}
+\item{x}{A SelectPie results list (from \code{\link{SelectPie}}) or a
+matrix coercible via \code{as.matrix}.}
 
 \item{caption}{Character string or \code{NULL}. Table caption.}
 
-\item{label}{Character string or \code{NULL}. LaTeX label for
-\code{\\ref\{\}} cross-referencing.}
+\item{label}{Character string or \code{NULL}. LaTeX label.}
 
 \item{align}{Character string or \code{NULL}. Column alignment
-specification, e.g. \code{"lcccc"}. Defaults to left-aligning the
-row-name column and centring all data columns.}
+specification. Defaults to left-aligning the row-name column and
+centring all data columns.}
 
 \item{booktabs}{Logical. If \code{TRUE} (the default), uses
-\code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule} from
-the \pkg{booktabs} LaTeX package instead of \code{\\hline}.}
+\code{\\toprule}, \code{\\midrule}, and \code{\\bottomrule}.}
 }
 \value{
-Invisibly returns the character vector of LaTeX lines; called
-  primarily for the side effect of printing via \code{cat}.
+Invisibly returns the character vector of LaTeX lines.
 }
 \description{
-Format a SelectPie results list or a matrix as a LaTeX \code{table} environment.
-When passed a SelectPie results list (with \code{results} and \code{fit_stats}),
-the function automatically splits the table at the outcome equation and appends
+Format a SelectPie results list or a matrix as a LaTeX \code{table}
+environment. When passed a SelectPie results list, the function
+automatically splits the table at the outcome equation and appends
 fit statistics at the bottom.
 }

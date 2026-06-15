@@ -40,37 +40,36 @@ One of \code{"ev"} (default, Gumbel-logistic copula) or
 
 \item{estimator}{Character string. One of \code{"mle"} (default) for full
 maximum likelihood, or \code{"heckman"} for the two-step Heckman
-procedure (probit selection + OLS with inverse Mills ratio correction).}
+procedure.}
 
 \item{method}{Optimization method passed to \code{\link[stats]{optim}}.
-Default is \code{"BFGS"}. Ignored when \code{estimator = "heckman"}.}
+Default is \code{"BFGS"}.}
 
-\item{maxit}{Integer. Maximum number of iterations passed to
-\code{\link[stats]{optim}}. Default is \code{1000}. Ignored when
-\code{estimator = "heckman"}.}
+\item{maxit}{Integer. Maximum number of iterations. Default is \code{1000}.}
 
 \item{multistart_corr}{Logical. If \code{TRUE} (the default), the
-optimiser is restarted from two additional starting values for the
-dependence parameter and the best solution is retained. Ignored when
-\code{estimator = "heckman"}.}
+optimiser is restarted from two additional starting values.}
 
-\item{B}{Integer. Number of bootstrap replications for standard errors.
-Set to \code{0} (default) to return point estimates only.}
+\item{B}{Integer. Number of bootstrap replications. Set to \code{0}
+(default) to return point estimates only.}
 }
 \value{
-A named list with two elements:
+A named list with three elements:
   \describe{
     \item{results}{A character matrix of point estimates (with significance
       stars when \code{B > 0}) and bootstrapped standard errors in
       parentheses (when \code{B > 0}).}
     \item{fit_stats}{A \code{data.frame} with \code{logLik}, \code{AIC},
-      \code{BIC}, \code{n}, and \code{k}. \code{logLik}, \code{AIC}, and
-      \code{BIC} are \code{NA} when \code{estimator = "heckman"}.}
+      \code{BIC}, \code{n}, and \code{k}.}
+    \item{predictions}{A \code{data.frame} with \code{log_ratio} (point
+      estimates of \eqn{X_2 \hat\beta_2}) and, when \code{B > 0},
+      \code{log_ratio_se} (bootstrap standard errors).}
   }
 }
 \description{
 Maximum likelihood estimation for compositional outcome models with
-selection into the sample, with optional bootstrapped standard errors.
+selection into the sample, with optional bootstrapped standard errors
+and predicted log-ratios.
 }
 \details{
 Supports three estimators: full MLE under the bivariate extreme value
@@ -80,5 +79,5 @@ normality (\code{distr = "normal"}), and the Heckman two-step procedure
 }
 \seealso{
 \code{\link{int_evd_closed}}, \code{\link{cdfevd}},
-  \code{\link{latex_table}}
+  \code{\link{compose_shares}}, \code{\link{latex_table}}
 }

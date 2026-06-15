@@ -4,34 +4,40 @@
 \alias{compose_shares}
 \title{compose_shares}
 \usage{
-compose_shares(predictions, reference = "reference")
+compose_shares(models, reference = "reference")
 }
 \arguments{
-\item{predictions}{A named list of \code{data.frame}s, each as returned by
-\code{\link{predict_SelectPie}}. Names identify the categories (e.g.
-\code{list(labour = lr_lab, libdem = lr_ld, ...)}).}
+\item{models}{A named list of SelectPie results lists as returned by
+\code{\link{SelectPie}}. Names identify the categories.}
 
-\item{reference}{Character string. Name to use for the reference category
-column in the output. Default is \code{"reference"}.}
+\item{reference}{Character string. Name for the reference category column.
+Default is \code{"reference"}.}
 }
 \value{
-A \code{data.frame} with one column per modelled category (named
-  after the list elements in \code{predictions}), one column for the
-  reference category (named by \code{reference}), and one
-  \code{participated} column per category (named
-  \code{<category>_participated}) indicating observed participation.
+A \code{data.frame} with one share column per modelled category,
+  one share column for the reference category, and (when bootstrap SEs are
+  available in all supplied models) one \code{_se} column per category
+  containing delta-method standard errors.
 }
 \description{
-Convert predicted log-ratios from multiple \code{\link{predict_SelectPie}}
-calls into compositional vote shares using the additive log-ratio (ALR)
-inverse transformation.
+Convert predicted log-ratios from multiple \code{\link{SelectPie}} objects
+into compositional vote shares using the additive log-ratio (ALR) inverse
+transformation. Propagates uncertainty via the delta method when bootstrap
+standard errors are available.
 }
 \details{
-The reference category (e.g. the dominant party whose vote share is not
-modelled directly) receives the residual share
+The reference category receives the residual share
 \eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each modelled category receives
 \eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
+
+Standard errors for each share are approximated via the delta method:
+\deqn{
+  \mathrm{SE}(\hat{s}_j) \approx \sqrt{
+    \hat{s}_j^2 (1 - \hat{s}_j)^2 \, \mathrm{SE}(\ell_j)^2 +
+    \sum_{k \neq j} \hat{s}_j^2 \hat{s}_k^2 \, \mathrm{SE}(\ell_k)^2
+  }
+}
 }
 \seealso{
-\code{\link{SelectPie}}, \code{\link{predict_SelectPie}}
+\code{\link{SelectPie}}, \code{\link{simulate_shock}}
 }

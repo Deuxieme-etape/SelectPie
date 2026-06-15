@@ -23,77 +23,42 @@ simulate_shock(
 \item{data}{A \code{data.frame} containing all variables.}
 
 \item{models}{A named list of model specifications, one per modelled
-category. Each element must be a list with named character elements:
-\code{y1} (selection indicator), \code{x1} (selection regressors),
-\code{y2} (outcome variable), and \code{x2} (outcome regressors).
-The names of the outer list become the category names in the output
-(e.g. \code{list(libdem = list(y1 = ..., x1 = ..., y2 = ..., x2 = ...))}).}
+category. Each element must be a list with named elements:
+\code{y1}, \code{x1}, \code{y2}, and \code{x2}.}
 
-\item{shock_var}{Character string. Name of the variable in \code{data}
-to shock.}
+\item{shock_var}{Character string. Name of the variable to shock.}
 
-\item{shock_sd}{Numeric. Number of standard deviations to add to
-\code{shock_var}. Default is \code{1}.}
+\item{shock_sd}{Numeric. Number of standard deviations to add. Default
+is \code{1}.}
 
-\item{reference}{Character string. Name to use for the reference
-category in the output. Default is \code{"reference"}.}
+\item{reference}{Character string. Name for the reference category.
+Default is \code{"reference"}.}
 
 \item{B}{Integer. Number of bootstrap draws. Default is \code{1000}.}
 
-\item{distr}{Character string. Passed to \code{\link{SelectPie}}.
-Default is \code{"ev"}.}
+\item{distr}{Character string. Passed to \code{\link{SelectPie}}.}
 
-\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.
-Default is \code{"mle"}.}
+\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.}
 
-\item{method}{Character string. Passed to \code{\link{SelectPie}}.
-Default is \code{"BFGS"}.}
+\item{method}{Character string. Passed to \code{\link{SelectPie}}.}
 
-\item{maxit}{Integer. Passed to \code{\link{SelectPie}}.
-Default is \code{1000}.}
+\item{maxit}{Integer. Passed to \code{\link{SelectPie}}.}
 
-\item{multistart_corr}{Logical. Passed to \code{\link{SelectPie}}.
-Default is \code{TRUE}.}
+\item{multistart_corr}{Logical. Passed to \code{\link{SelectPie}}.}
 
-\item{seed}{Integer or \code{NULL}. Random seed for reproducibility.
-Default is \code{NULL}.}
+\item{seed}{Integer or \code{NULL}. Random seed. Default is \code{NULL}.}
 }
 \value{
-A \code{data.frame} with one row per category (modelled
-  categories plus the reference) and columns:
-  \describe{
-    \item{category}{Category name.}
-    \item{mean}{Mean of the bootstrap distribution of average differences
-      (shocked minus baseline vote share).}
-    \item{sd}{Standard deviation of the bootstrap distribution.}
-    \item{lb}{Lower bound of the 95\% bootstrap interval (mean - 1.96*sd).}
-    \item{ub}{Upper bound of the 95\% bootstrap interval (mean + 1.96*sd).}
-  }
+A \code{data.frame} with columns \code{category}, \code{mean},
+  \code{sd}, \code{lb}, and \code{ub} summarising the bootstrap
+  distribution of average differences (shocked minus baseline) for each
+  category.
 }
 \description{
 Estimate the average marginal effect of a shock to a continuous variable
 on compositional vote shares, with uncertainty quantified via a
 nonparametric bootstrap that re-estimates all models on each draw.
 }
-\details{
-On each bootstrap draw the function:
-\enumerate{
-  \item Resamples the data with replacement.
-  \item Re-estimates all party models via \code{\link{SelectPie}} with
-    \code{B = 0} (point estimates only).
-  \item Predicts log-ratios twice on the \emph{original} data — once at
-    the observed values of \code{shock_var} (baseline) and once with
-    \code{shock_var} increased by \code{shock_sd} standard deviations
-    (shocked).
-  \item Converts both sets of log-ratios to vote shares via the ALR
-    inverse transformation (\code{\link{compose_shares}}).
-  \item Records the mean difference (shocked minus baseline) across
-    observations for each category and the reference category.
-}
-After all draws, the function summarises the bootstrap distribution of
-mean differences (mean, SD, and a 95\% interval).
-}
 \seealso{
-\code{\link{SelectPie}}, \code{\link{predict_SelectPie}},
-  \code{\link{compose_shares}}
+\code{\link{SelectPie}}, \code{\link{compose_shares}}
 }
