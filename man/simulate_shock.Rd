@@ -23,41 +23,71 @@ simulate_shock(
 \item{data}{A \code{data.frame} containing all variables.}
 
 \item{models}{A named list of model specifications, one per modelled
-category. Each element must be a list with named elements:
-\code{y1}, \code{x1}, \code{y2}, and \code{x2}.}
+category. Each element must be a list with either:
+\itemize{
+  \item \code{y1}, \code{x1}, \code{y2}, \code{x2} for a
+    \code{\link{SelectPie}} model, or
+  \item \code{y2}, \code{x2} only for an \code{lm} model.
+}}
 
 \item{shock_var}{Character string. Name of the variable to shock.}
 
-\item{shock_sd}{Numeric. Number of standard deviations to add. Default
-is \code{1}.}
+\item{shock_sd}{Numeric. Number of standard deviations to add to
+\code{shock_var}. Default is \code{1}.}
 
 \item{reference}{Character string. Name for the reference category.
 Default is \code{"reference"}.}
 
 \item{B}{Integer. Number of bootstrap draws. Default is \code{1000}.}
 
-\item{distr}{Character string. Passed to \code{\link{SelectPie}}.}
+\item{distr}{Character string. Passed to \code{\link{SelectPie}} for
+SelectPie specifications. Default is \code{"ev"}.}
 
-\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.}
+\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.
+Default is \code{"mle"}.}
 
-\item{method}{Character string. Passed to \code{\link{SelectPie}}.}
+\item{method}{Character string. Passed to \code{\link{SelectPie}}.
+Default is \code{"BFGS"}.}
 
-\item{maxit}{Integer. Passed to \code{\link{SelectPie}}.}
+\item{maxit}{Integer. Passed to \code{\link{SelectPie}}.
+Default is \code{1000}.}
 
-\item{multistart_corr}{Logical. Passed to \code{\link{SelectPie}}.}
+\item{multistart_corr}{Logical. Passed to \code{\link{SelectPie}}.
+Default is \code{TRUE}.}
 
-\item{seed}{Integer or \code{NULL}. Random seed. Default is \code{NULL}.}
+\item{seed}{Integer or \code{NULL}. Random seed for reproducibility.
+Default is \code{NULL}.}
 }
 \value{
 A \code{data.frame} with columns \code{category}, \code{mean},
   \code{sd}, \code{lb}, and \code{ub} summarising the bootstrap
-  distribution of average differences (shocked minus baseline) for each
-  category.
+  distribution of mean differences (shocked minus baseline) for each
+  category and the reference.
 }
 \description{
 Estimate the average marginal effect of a shock to a continuous variable
 on compositional vote shares, with uncertainty quantified via a
 nonparametric bootstrap that re-estimates all models on each draw.
+}
+\details{
+Each element of \code{models} is a named list specifying one category.
+If the element contains \code{y1} and \code{x1} it is treated as a
+\code{\link{SelectPie}} specification and re-estimated via
+\code{SelectPie(..., B = 0)} on each bootstrap draw. If it contains only
+\code{y2} and \code{x2} it is treated as an \code{lm} specification and
+re-estimated via \code{lm()} on each draw.
+
+On each bootstrap draw the function:
+\enumerate{
+  \item Resamples the data with replacement.
+  \item Re-estimates all models on the resampled data.
+  \item Predicts log-ratios twice on the \emph{original} data — once at
+    observed values of \code{shock_var} (baseline) and once with
+    \code{shock_var} increased by \code{shock_sd} standard deviations.
+  \item Converts both sets to vote shares via \code{\link{compose_shares}}.
+  \item Records the mean difference (shocked minus baseline) across
+    observations for each category.
+}
 }
 \seealso{
 \code{\link{SelectPie}}, \code{\link{compose_shares}}

@@ -678,27 +678,56 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
 #' on compositional vote shares, with uncertainty quantified via a
 #' nonparametric bootstrap that re-estimates all models on each draw.
 #'
+#' Each element of \code{models} is a named list specifying one category.
+#' If the element contains \code{y1} and \code{x1} it is treated as a
+#' \code{\link{SelectPie}} specification and re-estimated via
+#' \code{SelectPie(..., B = 0)} on each bootstrap draw. If it contains only
+#' \code{y2} and \code{x2} it is treated as an \code{lm} specification and
+#' re-estimated via \code{lm()} on each draw.
+#'
+#' On each bootstrap draw the function:
+#' \enumerate{
+#'   \item Resamples the data with replacement.
+#'   \item Re-estimates all models on the resampled data.
+#'   \item Predicts log-ratios twice on the \emph{original} data — once at
+#'     observed values of \code{shock_var} (baseline) and once with
+#'     \code{shock_var} increased by \code{shock_sd} standard deviations.
+#'   \item Converts both sets to vote shares via \code{\link{compose_shares}}.
+#'   \item Records the mean difference (shocked minus baseline) across
+#'     observations for each category.
+#' }
+#'
 #' @param data A \code{data.frame} containing all variables.
 #' @param models A named list of model specifications, one per modelled
-#'   category. Each element must be a list with named elements:
-#'   \code{y1}, \code{x1}, \code{y2}, and \code{x2}.
+#'   category. Each element must be a list with either:
+#'   \itemize{
+#'     \item \code{y1}, \code{x1}, \code{y2}, \code{x2} for a
+#'       \code{\link{SelectPie}} model, or
+#'     \item \code{y2}, \code{x2} only for an \code{lm} model.
+#'   }
 #' @param shock_var Character string. Name of the variable to shock.
-#' @param shock_sd Numeric. Number of standard deviations to add. Default
-#'   is \code{1}.
+#' @param shock_sd Numeric. Number of standard deviations to add to
+#'   \code{shock_var}. Default is \code{1}.
 #' @param reference Character string. Name for the reference category.
 #'   Default is \code{"reference"}.
 #' @param B Integer. Number of bootstrap draws. Default is \code{1000}.
-#' @param distr Character string. Passed to \code{\link{SelectPie}}.
+#' @param distr Character string. Passed to \code{\link{SelectPie}} for
+#'   SelectPie specifications. Default is \code{"ev"}.
 #' @param estimator Character string. Passed to \code{\link{SelectPie}}.
+#'   Default is \code{"mle"}.
 #' @param method Character string. Passed to \code{\link{SelectPie}}.
+#'   Default is \code{"BFGS"}.
 #' @param maxit Integer. Passed to \code{\link{SelectPie}}.
+#'   Default is \code{1000}.
 #' @param multistart_corr Logical. Passed to \code{\link{SelectPie}}.
-#' @param seed Integer or \code{NULL}. Random seed. Default is \code{NULL}.
+#'   Default is \code{TRUE}.
+#' @param seed Integer or \code{NULL}. Random seed for reproducibility.
+#'   Default is \code{NULL}.
 #'
 #' @return A \code{data.frame} with columns \code{category}, \code{mean},
 #'   \code{sd}, \code{lb}, and \code{ub} summarising the bootstrap
-#'   distribution of average differences (shocked minus baseline) for each
-#'   category.
+#'   distribution of mean differences (shocked minus baseline) for each
+#'   category and the reference.
 #'
 #' @seealso \code{\link{SelectPie}}, \code{\link{compose_shares}}
 #'
@@ -719,29 +748,36 @@ simulate_shock <- function(data,
   if (!is.list(models) || is.null(names(models)))
     stop("models must be a named list of model specifications.")
   
-  for (nm in names(models)) {
-    missing_fields <- setdiff(c("y1", "x1", "y2", "x2"), names(models[[nm]]))
-    if (length(missing_fields) > 0)
-      stop("Model '", nm, "' is missing: ", paste(missing_fields, collapse = ", "))
+  # ---- Classify each spec as "selectpie" or "lm" ----
+  .spec_type <- function(spec, nm) {
+    has_selection <- all(c("y1", "x1", "y2", "x2") %in% names(spec))
+    has_outcome   <- all(c("y2", "x2") %in% names(spec))
+    if (has_selection) return("selectpie")
+    if (has_outcome)   return("lm")
+    stop("Model '", nm, "' must have y2 and x2 (lm), or y1, x1, y2, x2 (SelectPie).")
   }
+  
+  spec_types <- mapply(.spec_type, models, names(models), SIMPLIFY = TRUE)
   
   if (!shock_var %in% names(data))
     stop("shock_var '", shock_var, "' not found in data.")
   
   if (!is.null(seed)) set.seed(seed)
   
-  cat_names  <- names(models)
-  all_cats   <- c(cat_names, reference)
-  n_obs      <- nrow(data)
-  index      <- seq_len(n_obs)
+  cat_names <- names(models)
+  all_cats  <- c(cat_names, reference)
+  n_obs     <- nrow(data)
+  index     <- seq_len(n_obs)
   
-  shock_size        <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
-  data_shocked      <- data
+  # Pre-compute shocked data (original + shock applied to shock_var)
+  shock_size            <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
+  data_shocked          <- data
   data_shocked[[shock_var]] <- data_shocked[[shock_var]] + shock_size
   
   boot_diffs <- matrix(NA_real_, nrow = B, ncol = length(all_cats),
                        dimnames = list(NULL, all_cats))
   
+  # ---- Bootstrap loop ----
   for (b in seq_len(B)) {
     
     if (b %% 100 == 0) message("Bootstrap draw ", b, " of ", B)
@@ -751,45 +787,44 @@ simulate_shock <- function(data,
       sample_idx     <- sample(index, n_obs, replace = TRUE)
       bootstrap_data <- data[sample_idx, ]
       
-      # Re-estimate all models on bootstrap data
+      # ---- Re-estimate all models on bootstrap data ----
       fitted <- lapply(cat_names, function(nm) {
         spec <- models[[nm]]
-        SelectPie(data            = bootstrap_data,
-                  y1              = spec$y1,
-                  x1              = spec$x1,
-                  y2              = spec$y2,
-                  x2              = spec$x2,
-                  distr           = distr,
-                  estimator       = estimator,
-                  method          = method,
-                  maxit           = maxit,
-                  multistart_corr = multistart_corr,
-                  B               = 0)
+        
+        if (spec_types[[nm]] == "selectpie") {
+          # Re-estimate via SelectPie (B = 0: point estimates only)
+          SelectPie(data            = bootstrap_data,
+                    y1              = spec$y1,
+                    x1              = spec$x1,
+                    y2              = spec$y2,
+                    x2              = spec$x2,
+                    distr           = distr,
+                    estimator       = estimator,
+                    method          = method,
+                    maxit           = maxit,
+                    multistart_corr = multistart_corr,
+                    B               = 0)
+        } else {
+          # Re-estimate via lm
+          stats::lm(
+            stats::reformulate(spec$x2, response = spec$y2),
+            data = bootstrap_data
+          )
+        }
       })
       names(fitted) <- cat_names
       
-      # Baseline shares on original data
-      shares_base    <- compose_shares(fitted, reference = reference)
+      # ---- Baseline shares on original data ----
+      shares_base <- compose_shares(fitted,
+                                    newdata   = data,
+                                    reference = reference)
       
-      # Shocked shares — temporarily replace predictions
-      fitted_shocked <- lapply(cat_names, function(nm) {
-        spec   <- models[[nm]]
-        fit_nm <- fitted[[nm]]
-        X2_s   <- stats::model.matrix(
-          stats::reformulate(spec$x2, response = NULL), data = data_shocked
-        )
-        par      <- fit_nm$results[c(TRUE, FALSE), , drop = FALSE]
-        par_num  <- as.numeric(gsub("\\$\\^\\{\\*+\\}\\$", "", par[, 1]))
-        beta2    <- par_num[(length(par_num) - length(spec$x2) - 1L):
-                              (length(par_num) - 1L)]
-        fit_nm$predictions$log_ratio <- as.vector(X2_s %*% beta2)
-        fit_nm
-      })
-      names(fitted_shocked) <- cat_names
+      # ---- Shocked shares on shocked data ----
+      shares_shock <- compose_shares(fitted,
+                                     newdata   = data_shocked,
+                                     reference = reference)
       
-      shares_shock <- compose_shares(fitted_shocked, reference = reference)
-      
-      # Mean difference across observations
+      # ---- Mean difference across observations ----
       vapply(all_cats, function(cat) {
         mean(shares_shock[[cat]] - shares_base[[cat]], na.rm = TRUE)
       }, numeric(1))
@@ -799,21 +834,125 @@ simulate_shock <- function(data,
     boot_diffs[b, ] <- result
   }
   
+  # ---- Remove failed draws ----
   n_failed <- sum(rowSums(is.na(boot_diffs)) > 0)
   if (n_failed > 0) {
     message(n_failed, " bootstrap draw(s) failed and were excluded.")
     boot_diffs <- boot_diffs[rowSums(is.na(boot_diffs)) == 0, , drop = FALSE]
   }
   
+  # ---- Summarise bootstrap distribution ----
   means <- apply(boot_diffs, 2, mean, na.rm = TRUE)
   sds   <- apply(boot_diffs, 2, stats::sd, na.rm = TRUE)
   
   data.frame(
-    category = all_cats,
-    mean     = round(means, 6),
-    sd       = round(sds,   6),
-    lb       = round(means - 1.96 * sds, 6),
-    ub       = round(means + 1.96 * sds, 6),
+    category  = all_cats,
+    mean      = round(means, 6),
+    sd        = round(sds,   6),
+    lb        = round(means - 1.96 * sds, 6),
+    ub        = round(means + 1.96 * sds, 6),
+    row.names = NULL
+  )
+}
+
+
+#' simulate_shock_nb
+#'
+#' Estimate the average marginal effect of a shock to a continuous variable
+#' on compositional vote shares without re-estimating models (no bootstrap).
+#'
+#' Uses already-fitted model objects — either \code{\link{SelectPie}} results
+#' lists or \code{lm} objects — to predict log-ratios twice: once at the
+#' observed values of \code{shock_var} (baseline) and once with
+#' \code{shock_var} increased by \code{shock_sd} standard deviations
+#' (shocked). Both sets of log-ratios are converted to vote shares via
+#' \code{\link{compose_shares}}, and the mean difference (shocked minus
+#' baseline) is returned for each category.
+#'
+#' Uncertainty is propagated analytically via the delta method inside
+#' \code{\link{compose_shares}}, using bootstrap SEs from
+#' \code{\link{SelectPie}} objects and analytical SEs from \code{vcov()} for
+#' \code{lm} objects. No re-estimation is performed.
+#'
+#' For a version that re-estimates all models on each bootstrap draw (slower
+#' but captures full estimation uncertainty), see \code{\link{simulate_shock}}.
+#'
+#' @param models A named list where each element is either a
+#'   \code{\link{SelectPie}} results list or a fitted \code{lm} object.
+#'   Names identify the categories.
+#' @param newdata A \code{data.frame} of observations at observed covariate
+#'   values (the baseline).
+#' @param shock_var Character string. Name of the variable in \code{newdata}
+#'   to shock.
+#' @param shock_sd Numeric. Number of standard deviations to add to
+#'   \code{shock_var}. Default is \code{1}.
+#' @param reference Character string. Name for the reference category.
+#'   Default is \code{"reference"}.
+#'
+#' @return A \code{data.frame} with one row per category (modelled categories
+#'   plus the reference) and columns:
+#'   \describe{
+#'     \item{category}{Category name.}
+#'     \item{mean_diff}{Mean difference in predicted vote share (shocked minus
+#'       baseline) across observations.}
+#'     \item{diff_se}{Delta-method SE of the mean difference, available when
+#'       all models carry SEs. \code{NA} otherwise.}
+#'   }
+#'
+#' @seealso \code{\link{SelectPie}}, \code{\link{compose_shares}},
+#'   \code{\link{simulate_shock}}
+#'
+#' @export
+simulate_shock_nb <- function(models,
+                              newdata,
+                              shock_var,
+                              shock_sd  = 1,
+                              reference = "reference") {
+  
+  if (!is.list(models) || is.null(names(models)))
+    stop("models must be a named list of SelectPie results or lm objects.")
+  
+  if (!shock_var %in% names(newdata))
+    stop("shock_var '", shock_var, "' not found in newdata.")
+  
+  # ---- Build shocked data ----
+  shock_size              <- shock_sd * stats::sd(newdata[[shock_var]], na.rm = TRUE)
+  newdata_shocked         <- newdata
+  newdata_shocked[[shock_var]] <- newdata_shocked[[shock_var]] + shock_size
+  
+  # ---- Baseline and shocked shares ----
+  shares_base  <- compose_shares(models,
+                                 newdata   = newdata,
+                                 reference = reference)
+  
+  shares_shock <- compose_shares(models,
+                                 newdata   = newdata_shocked,
+                                 reference = reference)
+  
+  # ---- Mean difference per category ----
+  all_cats  <- c(names(models), reference)
+  has_se    <- all(paste0(all_cats, "_se") %in% names(shares_base))
+  
+  mean_diff <- vapply(all_cats, function(cat) {
+    mean(shares_shock[[cat]] - shares_base[[cat]], na.rm = TRUE)
+  }, numeric(1))
+  
+  # ---- SE of the mean difference via delta method SEs on shares ----
+  # SE(mean(s_shock - s_base)) ≈ sqrt(SE(s_shock)^2 + SE(s_base)^2) / sqrt(n)
+  diff_se <- if (has_se) {
+    vapply(all_cats, function(cat) {
+      se_base  <- shares_base[[paste0(cat,  "_se")]]
+      se_shock <- shares_shock[[paste0(cat, "_se")]]
+      sqrt(mean(se_base^2 + se_shock^2, na.rm = TRUE)) / sqrt(nrow(newdata))
+    }, numeric(1))
+  } else {
+    rep(NA_real_, length(all_cats))
+  }
+  
+  data.frame(
+    category  = all_cats,
+    mean_diff = round(mean_diff, 6),
+    diff_se   = round(diff_se,   6),
     row.names = NULL
   )
 }
