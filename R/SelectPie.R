@@ -522,16 +522,23 @@ latex_table <- function(x,
 
 #' compose_shares
 #'
-#' Convert predicted log-ratios from multiple \code{\link{SelectPie}} objects
-#' into compositional vote shares using the additive log-ratio (ALR) inverse
-#' transformation. Propagates uncertainty via the delta method when bootstrap
-#' standard errors are available.
+#' Convert predicted log-ratios from multiple \code{\link{SelectPie}} and/or
+#' \code{lm} objects into compositional vote shares using the additive
+#' log-ratio (ALR) inverse transformation. Propagates uncertainty via the
+#' delta method when standard errors are available.
 #'
 #' The reference category receives the residual share
 #' \eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each modelled category receives
 #' \eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
 #'
-#' Standard errors for each share are approximated via the delta method:
+#' For \code{\link{SelectPie}} objects, prediction SEs come from the
+#' bootstrap distribution stored in \code{$predictions$log_ratio_se}.
+#' For \code{lm} objects, prediction SEs are computed analytically from the
+#' variance-covariance matrix using the efficient formula
+#' \eqn{\sqrt{\mathrm{rowSums}((X \Sigma) \circ X)}}, where \eqn{\Sigma} is
+#' \code{vcov(model)}.
+#'
+#' Standard errors for each share are then propagated via the delta method:
 #' \deqn{
 #'   \mathrm{SE}(\hat{s}_j) \approx \sqrt{
 #'     \hat{s}_j^2 (1 - \hat{s}_j)^2 \, \mathrm{SE}(\ell_j)^2 +
@@ -539,63 +546,92 @@ latex_table <- function(x,
 #'   }
 #' }
 #'
-#' @param models A named list of SelectPie results lists as returned by
-#'   \code{\link{SelectPie}}. Names identify the categories.
+#' @param models A named list where each element is either a
+#'   \code{\link{SelectPie}} results list or a fitted \code{lm} object.
+#'   Names identify the categories and become column names in the output.
+#' @param newdata A \code{data.frame} of observations for which to compute
+#'   predictions. Required when any element of \code{models} is an \code{lm}
+#'   object; ignored for \code{\link{SelectPie}} objects which already carry
+#'   their predictions internally.
 #' @param reference Character string. Name for the reference category column.
 #'   Default is \code{"reference"}.
 #'
 #' @return A \code{data.frame} with one share column per modelled category,
-#'   one share column for the reference category, and (when bootstrap SEs are
-#'   available in all supplied models) one \code{_se} column per category
-#'   containing delta-method standard errors.
+#'   one share column for the reference category, and (when SEs are available
+#'   for all models) one \code{_se} column per category containing
+#'   delta-method standard errors.
 #'
 #' @seealso \code{\link{SelectPie}}, \code{\link{simulate_shock}}
 #'
 #' @export
-compose_shares <- function(models, reference = "reference") {
+compose_shares <- function(models, newdata = NULL, reference = "reference") {
   
   if (!is.list(models) || is.null(names(models))) {
-    stop("models must be a named list of SelectPie result objects.")
+    stop("models must be a named list of SelectPie result objects or lm objects.")
   }
   
-  # Validate all elements are SelectPie lists
-  for (nm in names(models)) {
-    if (!all(c("results", "fit_stats", "predictions") %in% names(models[[nm]]))) {
-      stop("'", nm, "' does not appear to be a SelectPie results list.")
+  # ---- Helper: extract log-ratio and SE from a single model ----
+  .extract_lr <- function(model, nm) {
+    
+    # --- lm object ---
+    if (inherits(model, "lm")) {
+      if (is.null(newdata)) {
+        stop("newdata must be supplied when models contains lm objects.")
+      }
+      X2  <- stats::model.matrix(model$terms, data = newdata)
+      lr  <- as.vector(X2 %*% stats::coef(model))
+      # Efficient diagonal of X2 %*% vcov %*% t(X2)
+      V   <- stats::vcov(model)
+      se  <- sqrt(rowSums((X2 %*% V) * X2))
+      return(list(log_ratio = lr, log_ratio_se = se))
     }
+    
+    # --- SelectPie object ---
+    if (all(c("results", "fit_stats", "predictions") %in% names(model))) {
+      lr <- model$predictions$log_ratio
+      se <- if ("log_ratio_se" %in% names(model$predictions))
+        model$predictions$log_ratio_se
+      else
+        NULL
+      return(list(log_ratio = lr, log_ratio_se = se))
+    }
+    
+    stop("'", nm, "' must be either a SelectPie results list or an lm object.")
   }
+  
+  # ---- Extract from all models ----
+  extracted <- mapply(.extract_lr, models, names(models),
+                      SIMPLIFY = FALSE)
   
   cat_names <- names(models)
-  n_obs     <- nrow(models[[1]]$predictions)
+  n_obs     <- length(extracted[[1]]$log_ratio)
   
-  # Check all models have the same number of observations
-  lens <- vapply(models, function(m) nrow(m$predictions), integer(1))
+  # Check consistent number of observations
+  lens <- vapply(extracted, function(e) length(e$log_ratio), integer(1))
   if (any(lens != n_obs)) {
-    stop("All models must have the same number of observations in $predictions.")
+    stop("All models must produce the same number of predicted values. ",
+         "Check that newdata has the correct number of rows.")
   }
   
-  # ---- Extract log-ratios and SEs ----
-  has_se <- all(vapply(models,
-                       function(m) "log_ratio_se" %in% names(m$predictions),
-                       logical(1)))
-  
+  # ---- Build log-ratio and SE matrices ----
   lr_matrix <- matrix(NA_real_, nrow = n_obs, ncol = length(cat_names),
                       dimnames = list(NULL, cat_names))
-  for (nm in cat_names) {
-    lr_matrix[, nm] <- models[[nm]]$predictions$log_ratio
-  }
+  for (nm in cat_names) lr_matrix[, nm] <- extracted[[nm]]$log_ratio
+  
+  has_se <- all(vapply(extracted,
+                       function(e) !is.null(e$log_ratio_se),
+                       logical(1)))
   
   se_matrix <- if (has_se) {
     m <- matrix(NA_real_, nrow = n_obs, ncol = length(cat_names),
                 dimnames = list(NULL, cat_names))
-    for (nm in cat_names) m[, nm] <- models[[nm]]$predictions$log_ratio_se
+    for (nm in cat_names) m[, nm] <- extracted[[nm]]$log_ratio_se
     m
   } else NULL
   
   # ---- ALR inverse transformation ----
-  exp_lr <- exp(lr_matrix)
-  denom  <- 1 + rowSums(exp_lr)
-  
+  exp_lr       <- exp(lr_matrix)
+  denom        <- 1 + rowSums(exp_lr)
   share_matrix <- exp_lr / denom
   ref_share    <- 1 / denom
   
@@ -607,17 +643,16 @@ compose_shares <- function(models, reference = "reference") {
   # ---- Delta method SEs ----
   if (has_se) {
     
-    all_cats  <- c(cat_names, reference)
+    all_cats   <- c(cat_names, reference)
     all_shares <- cbind(share_matrix, ref_share)
     colnames(all_shares) <- all_cats
     
     for (j in all_cats) {
-      sj <- all_shares[, j]
-      
-      # Variance contribution from each modelled log-ratio
+      sj    <- all_shares[, j]
       var_j <- rep(0, n_obs)
+      
       for (nm in cat_names) {
-        sk <- all_shares[, nm]
+        sk   <- all_shares[, nm]
         se_k <- se_matrix[, nm]
         
         if (j == nm) {

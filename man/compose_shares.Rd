@@ -4,33 +4,46 @@
 \alias{compose_shares}
 \title{compose_shares}
 \usage{
-compose_shares(models, reference = "reference")
+compose_shares(models, newdata = NULL, reference = "reference")
 }
 \arguments{
-\item{models}{A named list of SelectPie results lists as returned by
-\code{\link{SelectPie}}. Names identify the categories.}
+\item{models}{A named list where each element is either a
+\code{\link{SelectPie}} results list or a fitted \code{lm} object.
+Names identify the categories and become column names in the output.}
+
+\item{newdata}{A \code{data.frame} of observations for which to compute
+predictions. Required when any element of \code{models} is an \code{lm}
+object; ignored for \code{\link{SelectPie}} objects which already carry
+their predictions internally.}
 
 \item{reference}{Character string. Name for the reference category column.
 Default is \code{"reference"}.}
 }
 \value{
 A \code{data.frame} with one share column per modelled category,
-  one share column for the reference category, and (when bootstrap SEs are
-  available in all supplied models) one \code{_se} column per category
-  containing delta-method standard errors.
+  one share column for the reference category, and (when SEs are available
+  for all models) one \code{_se} column per category containing
+  delta-method standard errors.
 }
 \description{
-Convert predicted log-ratios from multiple \code{\link{SelectPie}} objects
-into compositional vote shares using the additive log-ratio (ALR) inverse
-transformation. Propagates uncertainty via the delta method when bootstrap
-standard errors are available.
+Convert predicted log-ratios from multiple \code{\link{SelectPie}} and/or
+\code{lm} objects into compositional vote shares using the additive
+log-ratio (ALR) inverse transformation. Propagates uncertainty via the
+delta method when standard errors are available.
 }
 \details{
 The reference category receives the residual share
 \eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each modelled category receives
 \eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
 
-Standard errors for each share are approximated via the delta method:
+For \code{\link{SelectPie}} objects, prediction SEs come from the
+bootstrap distribution stored in \code{$predictions$log_ratio_se}.
+For \code{lm} objects, prediction SEs are computed analytically from the
+variance-covariance matrix using the efficient formula
+\eqn{\sqrt{\mathrm{rowSums}((X \Sigma) \circ X)}}, where \eqn{\Sigma} is
+\code{vcov(model)}.
+
+Standard errors for each share are then propagated via the delta method:
 \deqn{
   \mathrm{SE}(\hat{s}_j) \approx \sqrt{
     \hat{s}_j^2 (1 - \hat{s}_j)^2 \, \mathrm{SE}(\ell_j)^2 +
