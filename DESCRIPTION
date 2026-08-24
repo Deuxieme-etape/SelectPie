@@ -15,7 +15,6 @@ Description: Maximum likelihood estimation for compositional outcome models
     a utility for exporting results to LaTeX tables.
 License: MIT + file LICENSE
 Encoding: UTF-8
-RoxygenNote: 7.3.2
 Imports:
     stats
 Suggests:
@@ -23,3 +22,4 @@ Suggests:
 Config/testthat/edition: 3
 URL: https://github.com/Deuxieme-etape/SelectPie
 BugReports: https://github.com/Deuxieme-etape/SelectPie/issues
+Config/roxygen2/version: 8.0.0

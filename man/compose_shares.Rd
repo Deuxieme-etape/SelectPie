@@ -50,6 +50,11 @@ Standard errors for each share are then propagated via the delta method:
     \sum_{k \neq j} \hat{s}_j^2 \hat{s}_k^2 \, \mathrm{SE}(\ell_k)^2
   }
 }
+
+For the reference category (which has no associated log-ratio), the first
+term is absent and the expression reduces to the cross-derivative sum
+\eqn{\sqrt{\sum_k \hat{s}_{\text{ref}}^2\, \hat{s}_k^2\;
+\mathrm{SE}(\ell_k)^2}}.
 }
 \seealso{
 \code{\link{SelectPie}}, \code{\link{simulate_shock}}

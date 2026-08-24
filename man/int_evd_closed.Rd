@@ -19,7 +19,7 @@ A strictly positive numeric vector (floored at
   \code{.Machine$double.xmin}) so that \code{log()} is safe to apply.
 }
 \description{
-Closed-form marginal integral for the bivariate Gumbel-logistic copula.
+Closed-form marginal integral for the bivariate Gumbel-logistic.
 }
 \details{
 Computes \eqn{\int_{a}^{\infty} f_{X,Y}(x, y)\, dx} in closed form for

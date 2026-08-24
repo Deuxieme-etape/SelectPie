@@ -22,6 +22,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Erik Chi \email{erikchi@tamu.edu}
   \item Thiago Moreira \email{tmoreira@lsu.edu}
   \item Guy Whitten \email{g-whitten@tamu.edu}
   \item Yongzhi Xu \email{yz_xu@tamu.edu}

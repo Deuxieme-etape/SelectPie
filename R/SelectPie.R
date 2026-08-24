@@ -32,7 +32,7 @@ cdfevd <- function(x) {
 
 #' int_evd_closed
 #'
-#' Closed-form marginal integral for the bivariate Gumbel-logistic copula.
+#' Closed-form marginal integral for the bivariate Gumbel-logistic.
 #'
 #' Computes \eqn{\int_{a}^{\infty} f_{X,Y}(x, y)\, dx} in closed form for
 #' the bivariate extreme value distribution with dependence parameter
@@ -267,14 +267,14 @@ SelectPie <- function(data, y1, x1, y2, x2,
       out[length(out)] <- 1 - 1 / (1 + exp(out[length(out)]))
     } else if (distr == "normal") {
       out[length(out) - 1L] <- 2 / (1 + exp(-out[length(out) - 1L])) - 1
-      out <- out[-length(out)]
+      out[length(out)] <- exp(out[length(out)])
     }
     out
   }
   
   # ---- Internal: extract beta2 from parameter vector ----
   .get_beta2 <- function(par) {
-    par[(length(par) - length(x2) - 1L):(length(par) - 1L)]
+    par[(p1 + 1L):(p1 + p2)]
   }
   
   # ---- Internal: predicted log-ratios from original data ----
@@ -303,6 +303,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
     beta1 <- point_est[seq_len(k1)]
     beta2 <- point_est[(k1 + 1L):(k1 + k2)]
     rho   <- point_est[k1 + k2 + 1L]
+    sigma <- if(distr == "normal") point_est[k1+k2+2L] else NA_real_
     
     X1 <- stats::model.matrix(stats::reformulate(x1, response = NULL), data = data)
     X2 <- stats::model.matrix(stats::reformulate(x2, response = NULL), data = data)
@@ -327,8 +328,8 @@ SelectPie <- function(data, y1, x1, y2, x2,
       
     } else if (distr == "normal") {
       ll[not_observed] <- stats::pnorm(xb1[not_observed], log.p = TRUE)
-      z                     <- u[observed]
-      log_density_u         <- stats::dnorm(z, log = TRUE)
+      z                     <- u[observed] / sigma
+      log_density_u         <- stats::dnorm(z, log = TRUE) - log(sigma)
       log_selection_given_u <- stats::pnorm(
         (-xb1[observed] + rho * z) / sqrt(1 - rho^2), log.p = TRUE
       )
@@ -355,9 +356,15 @@ SelectPie <- function(data, y1, x1, y2, x2,
   # ---- Row names for results matrix ----
   last_term <- if (estimator == "heckman") "IMR" else "Corr."
   x1_full   <- as.vector(rbind(c("(Intercept1)", x1), ""))
-  x2_full   <- as.vector(rbind(c("(Intercept2)", x2, last_term), ""))
+  
+  if(distr == "normal" && estimator == "mle"){
+    x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term, "Sigma"), ""))
+  } else {
+    x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term), ""))
+  }
+  
   row_names <- c(x1_full, x2_full)
-  k         <- length(x1) + length(x2) + 3
+  k         <- length(x1) + length(x2) + if (distr == "normal" && estimator == "mle") 4L else 3L
   
   # ---- Bootstrap ----
   if (B > 0) {
@@ -545,6 +552,11 @@ latex_table <- function(x,
 #'     \sum_{k \neq j} \hat{s}_j^2 \hat{s}_k^2 \, \mathrm{SE}(\ell_k)^2
 #'   }
 #' }
+#'
+#' For the reference category (which has no associated log-ratio), the first
+#' term is absent and the expression reduces to the cross-derivative sum
+#' \eqn{\sqrt{\sum_k \hat{s}_{\text{ref}}^2\, \hat{s}_k^2\;
+#' \mathrm{SE}(\ell_k)^2}}.
 #'
 #' @param models A named list where each element is either a
 #'   \code{\link{SelectPie}} results list or a fitted \code{lm} object.
@@ -856,10 +868,11 @@ simulate_shock <- function(data,
 }
 
 
-#' simulate_shock_nb
+#' predict_shock
 #'
-#' Estimate the average marginal effect of a shock to a continuous variable
-#' on compositional vote shares without re-estimating models (no bootstrap).
+#' Predict the average marginal effect of a shock to a continuous variable
+#' on compositional vote shares using pre-estimated coefficients. 
+#' No re-estimation or bootstrapping is performed here. 
 #'
 #' Uses already-fitted model objects — either \code{\link{SelectPie}} results
 #' lists or \code{lm} objects — to predict log-ratios twice: once at the
@@ -903,11 +916,11 @@ simulate_shock <- function(data,
 #'   \code{\link{simulate_shock}}
 #'
 #' @export
-simulate_shock_nb <- function(models,
-                              newdata,
-                              shock_var,
-                              shock_sd  = 1,
-                              reference = "reference") {
+predict_shock <- function(models,
+                          newdata,
+                          shock_var,
+                          shock_sd  = 1,
+                          reference = "reference") {
   
   if (!is.list(models) || is.null(names(models)))
     stop("models must be a named list of SelectPie results or lm objects.")
