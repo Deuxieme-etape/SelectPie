@@ -64,6 +64,8 @@ A named list with three elements:
     \item{predictions}{A \code{data.frame} with \code{log_ratio} (point
       estimates of \eqn{X_2 \hat\beta_2}) and, when \code{B > 0},
       \code{log_ratio_se} (bootstrap standard errors).}
+    \item{vcov}{A \code{k} by \code{k} bootstrap variance-covariance matrix of the parameter vector, 
+    or \code{NULL} when \code{B = 0}.}
   }
 }
 \description{
@@ -73,9 +75,10 @@ and predicted log-ratios.
 }
 \details{
 Supports three estimators: full MLE under the bivariate extreme value
-(Gumbel-logistic) copula (\code{distr = "ev"}), full MLE under bivariate
+(Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 normality (\code{distr = "normal"}), and the Heckman two-step procedure
-(\code{estimator = "heckman"}).
+(\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
+the second stage.
 }
 \seealso{
 \code{\link{int_evd_closed}}, \code{\link{cdfevd}},

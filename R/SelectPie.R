@@ -73,9 +73,10 @@ int_evd_closed <- function(x, y, m) {
 #' and predicted log-ratios.
 #'
 #' Supports three estimators: full MLE under the bivariate extreme value
-#' (Gumbel-logistic) copula (\code{distr = "ev"}), full MLE under bivariate
+#' (Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 #' normality (\code{distr = "normal"}), and the Heckman two-step procedure
-#' (\code{estimator = "heckman"}).
+#' (\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
+#' the second stage.
 #'
 #' @param data A \code{data.frame} containing all variables.
 #' @param y1 Character string. Name of the binary selection indicator
@@ -111,6 +112,8 @@ int_evd_closed <- function(x, y, m) {
 #'     \item{predictions}{A \code{data.frame} with \code{log_ratio} (point
 #'       estimates of \eqn{X_2 \hat\beta_2}) and, when \code{B > 0},
 #'       \code{log_ratio_se} (bootstrap standard errors).}
+#'     \item{vcov}{A \code{k} by \code{k} bootstrap variance-covariance matrix of the parameter vector, 
+#'     or \code{NULL} when \code{B = 0}.}
 #'   }
 #'
 #' @seealso \code{\link{int_evd_closed}}, \code{\link{cdfevd}},
@@ -274,7 +277,9 @@ SelectPie <- function(data, y1, x1, y2, x2,
   
   # ---- Internal: extract beta2 from parameter vector ----
   .get_beta2 <- function(par) {
-    par[(p1 + 1L):(p1 + p2)]
+    k1 <- length(x1) + 1L
+    k2 <- length(x2) + 1L
+    par[(k1 + 1L):(k1 + k2)]
   }
   
   # ---- Internal: predicted log-ratios from original data ----
@@ -367,6 +372,8 @@ SelectPie <- function(data, y1, x1, y2, x2,
   k         <- length(x1) + length(x2) + if (distr == "normal" && estimator == "mle") 4L else 3L
   
   # ---- Bootstrap ----
+  boot_cov <- NULL
+  
   if (B > 0) {
     n     <- nrow(data)
     index <- seq_len(n)
@@ -393,6 +400,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
     
     boot_se    <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
     boot_lr_se <- apply(boot_lr,   2, stats::sd, na.rm = TRUE)
+    boot_cov   <- stats::cov(boot_ests)
     
     # ---- Format results matrix ----
     results <- matrix(NA_character_, nrow = 2 * k, ncol = 1,
@@ -430,7 +438,8 @@ SelectPie <- function(data, y1, x1, y2, x2,
   list(
     results     = results,
     fit_stats   = fit_stats,
-    predictions = predictions
+    predictions = predictions,
+    vcov        = boot_cov
   )
 }
 
