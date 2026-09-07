@@ -16,7 +16,6 @@ XbetaFunc <- function(data, beta) {
 #' cdfevd
 #'
 #' Marginal CDF helper function (Gumbel / extreme value distribution).
-#' Kept for completeness; the main objective uses the log form directly.
 #'
 #' @param x Numeric vector. Values to be transformed via the standardized
 #'   Gumbel CDF to the (0, 1) interval.
@@ -72,7 +71,8 @@ int_evd_closed <- function(x, y, m) {
 #' selection into the sample, with optional bootstrapped standard errors
 #' and predicted log-ratios.
 #'
-#' Supports three estimators: full MLE under the bivariate extreme value
+#' Supports three estimators: full MLE with simultaneous estimation of 
+#' selection and outcome equations under the bivariate extreme value
 #' (Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 #' normality (\code{distr = "normal"}), and the Heckman two-step procedure
 #' (\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
@@ -87,18 +87,16 @@ int_evd_closed <- function(x, y, m) {
 #'   (observed only when \code{y1 == 1}).
 #' @param x2 Character vector of regressor names for the outcome equation.
 #'   An intercept is added automatically via \code{model.matrix}.
-#' @param distr Character string. Distribution assumption for the MLE.
-#'   One of \code{"ev"} (default, Gumbel-logistic copula) or
-#'   \code{"normal"} (bivariate normal). Ignored when
-#'   \code{estimator = "heckman"}.
-#' @param estimator Character string. One of \code{"mle"} (default) for full
-#'   maximum likelihood, or \code{"heckman"} for the two-step Heckman
-#'   procedure.
+#' @param estimator \code{"mle_full"} (default) for simultaneous estimation 
+#'   and outcome equations, or \code{"heckman_twostep"} for the two-step estimator. 
+#' @param distr Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default)
+#'   for the Gumbel-logistic; \code{"normal"} for bivariate normality. For two-step
+#'   \code{estimator = "heckman"} the first stage is always \code{"normal"} for probit.
 #' @param method Optimization method passed to \code{\link[stats]{optim}}.
 #'   Default is \code{"BFGS"}.
 #' @param maxit Integer. Maximum number of iterations. Default is \code{1000}.
 #' @param multistart_corr Logical. If \code{TRUE} (the default), the
-#'   optimiser is restarted from two additional starting values.
+#'   optimizer is restarted from two additional starting values.
 #' @param B Integer. Number of bootstrap replications. Set to \code{0}
 #'   (default) to return point estimates only.
 #'
@@ -121,8 +119,8 @@ int_evd_closed <- function(x, y, m) {
 #'
 #' @export
 SelectPie <- function(data, y1, x1, y2, x2,
+                      estimator       = c("mle_full", "heckman_twostep"),
                       distr           = c("ev", "normal"),
-                      estimator       = c("mle", "heckman"),
                       method          = "BFGS",
                       maxit           = 1000,
                       multistart_corr = TRUE,
@@ -146,7 +144,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
     idx_sel <- (y1v == 1)
     
     # ---- Heckman two-step ----
-    if (estimator == "heckman") {
+    if (estimator == "heckman_twostep") {
       probit_fit <- stats::glm(
         stats::reformulate(x1, response = y1),
         family = stats::binomial(link = "probit"),
@@ -244,7 +242,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
       -sum(obj1 + obj2)
     }
     
-    # ---- Optimisation ----
+    # ---- Optimization ----
     res <- stats::optim(para0, objFunc,
                         method  = method,
                         control = list(maxit = maxit))
@@ -297,7 +295,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
     n_obs    <- sum(!is.na(data[[y1]]))
     n_params <- length(point_est)
     
-    if (estimator == "heckman") {
+    if (estimator == "heckman_twostep") {
       return(data.frame(logLik = NA_real_, AIC = NA_real_,
                         BIC = NA_real_, n = n_obs, k = n_params))
     }
@@ -769,16 +767,16 @@ simulate_shock <- function(data,
   if (!is.list(models) || is.null(names(models)))
     stop("models must be a named list of model specifications.")
   
-  # ---- Classify each spec as "selectpie" or "lm" ----
-  .spec_type <- function(spec, nm) {
-    has_selection <- all(c("y1", "x1", "y2", "x2") %in% names(spec))
-    has_outcome   <- all(c("y2", "x2") %in% names(spec))
+  # ---- Classify each specification as "selectpie" or "lm" ----
+  .specification_type <- function(specification, nm) {
+    has_selection <- all(c("y1", "x1", "y2", "x2") %in% names(specification))
+    has_outcome   <- all(c("y2", "x2") %in% names(specification))
     if (has_selection) return("selectpie")
     if (has_outcome)   return("lm")
     stop("Model '", nm, "' must have y2 and x2 (lm), or y1, x1, y2, x2 (SelectPie).")
   }
   
-  spec_types <- mapply(.spec_type, models, names(models), SIMPLIFY = TRUE)
+  specification_types <- mapply(.specification_type, models, names(models), SIMPLIFY = TRUE)
   
   if (!shock_var %in% names(data))
     stop("shock_var '", shock_var, "' not found in data.")
@@ -810,15 +808,15 @@ simulate_shock <- function(data,
       
       # ---- Re-estimate all models on bootstrap data ----
       fitted <- lapply(cat_names, function(nm) {
-        spec <- models[[nm]]
+        specification <- models[[nm]]
         
-        if (spec_types[[nm]] == "selectpie") {
+        if (specification_types[[nm]] == "selectpie") {
           # Re-estimate via SelectPie (B = 0: point estimates only)
           SelectPie(data            = bootstrap_data,
-                    y1              = spec$y1,
-                    x1              = spec$x1,
-                    y2              = spec$y2,
-                    x2              = spec$x2,
+                    y1              = specification$y1,
+                    x1              = specification$x1,
+                    y2              = specification$y2,
+                    x2              = specification$x2,
                     distr           = distr,
                     estimator       = estimator,
                     method          = method,
@@ -828,7 +826,7 @@ simulate_shock <- function(data,
         } else {
           # Re-estimate via lm
           stats::lm(
-            stats::reformulate(spec$x2, response = spec$y2),
+            stats::reformulate(specification$x2, response = specification$y2),
             data = bootstrap_data
           )
         }

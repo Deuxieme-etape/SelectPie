@@ -15,5 +15,4 @@ Numeric vector of CDF values in (0, 1).
 }
 \description{
 Marginal CDF helper function (Gumbel / extreme value distribution).
-Kept for completeness; the main objective uses the log form directly.
 }

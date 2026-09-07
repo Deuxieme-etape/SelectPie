@@ -10,8 +10,8 @@ SelectPie(
   x1,
   y2,
   x2,
+  estimator = c("mle_full", "heckman_twostep"),
   distr = c("ev", "normal"),
-  estimator = c("mle", "heckman"),
   method = "BFGS",
   maxit = 1000,
   multistart_corr = TRUE,
@@ -33,14 +33,12 @@ An intercept is added automatically via \code{model.matrix}.}
 \item{x2}{Character vector of regressor names for the outcome equation.
 An intercept is added automatically via \code{model.matrix}.}
 
-\item{distr}{Character string. Distribution assumption for the MLE.
-One of \code{"ev"} (default, Gumbel-logistic copula) or
-\code{"normal"} (bivariate normal). Ignored when
-\code{estimator = "heckman"}.}
+\item{estimator}{\code{"mle_full"} (default) for simultaneous estimation 
+and outcome equations, or \code{"heckman_twostep"} for the two-step estimator.}
 
-\item{estimator}{Character string. One of \code{"mle"} (default) for full
-maximum likelihood, or \code{"heckman"} for the two-step Heckman
-procedure.}
+\item{distr}{Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default)
+for the Gumbel-logistic; \code{"normal"} for bivariate normality. For two-step
+\code{estimator = "heckman"} the first stage is always \code{"normal"} for probit.}
 
 \item{method}{Optimization method passed to \code{\link[stats]{optim}}.
 Default is \code{"BFGS"}.}
@@ -48,7 +46,7 @@ Default is \code{"BFGS"}.}
 \item{maxit}{Integer. Maximum number of iterations. Default is \code{1000}.}
 
 \item{multistart_corr}{Logical. If \code{TRUE} (the default), the
-optimiser is restarted from two additional starting values.}
+optimizer is restarted from two additional starting values.}
 
 \item{B}{Integer. Number of bootstrap replications. Set to \code{0}
 (default) to return point estimates only.}
@@ -74,7 +72,8 @@ selection into the sample, with optional bootstrapped standard errors
 and predicted log-ratios.
 }
 \details{
-Supports three estimators: full MLE under the bivariate extreme value
+Supports three estimators: full MLE with simultaneous estimation of 
+selection and outcome equations under the bivariate extreme value
 (Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 normality (\code{distr = "normal"}), and the Heckman two-step procedure
 (\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
