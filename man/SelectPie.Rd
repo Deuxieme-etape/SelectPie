@@ -68,8 +68,8 @@ A named list with three elements:
 }
 \description{
 Maximum likelihood estimation for compositional outcome models with
-selection into the sample, with optional bootstrapped standard errors
-and predicted log-ratios.
+selection into the sample, with optional bootstrapped standard errors,
+predicted log-ratios, and optional bootstrapped variance-covariance matrix.
 }
 \details{
 Supports three estimators: full MLE with simultaneous estimation of 

@@ -68,8 +68,8 @@ int_evd_closed <- function(x, y, m) {
 #' SelectPie
 #'
 #' Maximum likelihood estimation for compositional outcome models with
-#' selection into the sample, with optional bootstrapped standard errors
-#' and predicted log-ratios.
+#' selection into the sample, with optional bootstrapped standard errors,
+#' predicted log-ratios, and optional bootstrapped variance-covariance matrix.
 #'
 #' Supports three estimators: full MLE with simultaneous estimation of 
 #' selection and outcome equations under the bivariate extreme value
