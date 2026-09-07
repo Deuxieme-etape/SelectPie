@@ -75,7 +75,7 @@ int_evd_closed <- function(x, y, m) {
 #' selection and outcome equations under the bivariate extreme value
 #' (Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 #' normality (\code{distr = "normal"}), and the Heckman two-step procedure
-#' (\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
+#' (\code{estimator = "heckman_twostep"}), which uses Probit in the first stage and OLS 
 #' the second stage.
 #'
 #' @param data A \code{data.frame} containing all variables.
@@ -91,7 +91,7 @@ int_evd_closed <- function(x, y, m) {
 #'   and outcome equations, or \code{"heckman_twostep"} for the two-step estimator. 
 #' @param distr Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default)
 #'   for the Gumbel-logistic; \code{"normal"} for bivariate normality. For two-step
-#'   \code{estimator = "heckman"} the first stage is always \code{"normal"} for probit.
+#'   \code{estimator = "heckman_twostep"} the first stage is always \code{"normal"} for probit.
 #' @param method Optimization method passed to \code{\link[stats]{optim}}.
 #'   Default is \code{"BFGS"}.
 #' @param maxit Integer. Maximum number of iterations. Default is \code{1000}.
@@ -357,17 +357,17 @@ SelectPie <- function(data, y1, x1, y2, x2,
   lr_point <- .predict_lr(point_est)
   
   # ---- Row names for results matrix ----
-  last_term <- if (estimator == "heckman") "IMR" else "Corr."
+  last_term <- if (estimator == "heckman_twostep") "IMR" else "Corr."
   x1_full   <- as.vector(rbind(c("(Intercept1)", x1), ""))
   
-  if(distr == "normal" && estimator == "mle"){
+  if(distr == "normal" && estimator == "mle_full"){
     x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term, "Sigma"), ""))
   } else {
     x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term), ""))
   }
   
   row_names <- c(x1_full, x2_full)
-  k         <- length(x1) + length(x2) + if (distr == "normal" && estimator == "mle") 4L else 3L
+  k         <- length(x1) + length(x2) + if (distr == "normal" && estimator == "mle_full") 4L else 3L
   
   # ---- Bootstrap ----
   boot_cov <- NULL

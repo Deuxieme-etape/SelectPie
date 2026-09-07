@@ -38,7 +38,7 @@ and outcome equations, or \code{"heckman_twostep"} for the two-step estimator.}
 
 \item{distr}{Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default)
 for the Gumbel-logistic; \code{"normal"} for bivariate normality. For two-step
-\code{estimator = "heckman"} the first stage is always \code{"normal"} for probit.}
+\code{estimator = "heckman_twostep"} the first stage is always \code{"normal"} for probit.}
 
 \item{method}{Optimization method passed to \code{\link[stats]{optim}}.
 Default is \code{"BFGS"}.}
@@ -76,7 +76,7 @@ Supports three estimators: full MLE with simultaneous estimation of
 selection and outcome equations under the bivariate extreme value
 (Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
 normality (\code{distr = "normal"}), and the Heckman two-step procedure
-(\code{estimator = "heckman"}), which uses Probit in the first stage and OLS 
+(\code{estimator = "heckman_twostep"}), which uses Probit in the first stage and OLS 
 the second stage.
 }
 \seealso{
