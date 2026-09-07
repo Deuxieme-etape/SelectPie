@@ -733,7 +733,7 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
 #' @param distr Character string. Passed to \code{\link{SelectPie}} for
 #'   SelectPie specifications. Default is \code{"ev"}.
 #' @param estimator Character string. Passed to \code{\link{SelectPie}}.
-#'   Default is \code{"mle"}.
+#'   Default is \code{"mle_full"}.
 #' @param method Character string. Passed to \code{\link{SelectPie}}.
 #'   Default is \code{"BFGS"}.
 #' @param maxit Integer. Passed to \code{\link{SelectPie}}.
@@ -757,8 +757,8 @@ simulate_shock <- function(data,
                            shock_sd        = 1,
                            reference       = "reference",
                            B               = 1000,
+                           estimator       = "mle_full",
                            distr           = "ev",
-                           estimator       = "mle",
                            method          = "BFGS",
                            maxit           = 1000,
                            multistart_corr = TRUE,

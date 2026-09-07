@@ -11,8 +11,8 @@ simulate_shock(
   shock_sd = 1,
   reference = "reference",
   B = 1000,
+  estimator = "mle_full",
   distr = "ev",
-  estimator = "mle",
   method = "BFGS",
   maxit = 1000,
   multistart_corr = TRUE,
@@ -40,11 +40,11 @@ Default is \code{"reference"}.}
 
 \item{B}{Integer. Number of bootstrap draws. Default is \code{1000}.}
 
+\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.
+Default is \code{"mle_full"}.}
+
 \item{distr}{Character string. Passed to \code{\link{SelectPie}} for
 SelectPie specifications. Default is \code{"ev"}.}
-
-\item{estimator}{Character string. Passed to \code{\link{SelectPie}}.
-Default is \code{"mle"}.}
 
 \item{method}{Character string. Passed to \code{\link{SelectPie}}.
 Default is \code{"BFGS"}.}
