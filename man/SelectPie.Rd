@@ -21,63 +21,41 @@ SelectPie(
 \arguments{
 \item{data}{A \code{data.frame} containing all variables.}
 
-\item{y1}{Character string. Name of the binary selection indicator
-(1 = selected, 0 = not selected).}
+\item{y1}{Character string. Name of the binary selection indicator (1 = selected, 0 = not selected).}
 
-\item{x1}{Character vector of regressor names for the selection equation.
-An intercept is added automatically via \code{model.matrix}.}
+\item{x1}{Character vector of regressor names for the selection equation. An intercept is added automatically via \code{model.matrix}.}
 
-\item{y2}{Character string. Name of the continuous compositional outcome
-(observed only when \code{y1 == 1}).}
+\item{y2}{Character string. Name of the continuous compositional outcome (observed only when \code{y1 == 1}).}
 
-\item{x2}{Character vector of regressor names for the outcome equation.
-An intercept is added automatically via \code{model.matrix}.}
+\item{x2}{Character vector of regressor names for the outcome equation. An intercept is added automatically via \code{model.matrix}.}
 
-\item{estimator}{\code{"mle_full"} (default) for simultaneous estimation 
-and outcome equations, or \code{"heckman_twostep"} for the two-step estimator.}
+\item{estimator}{\code{"mle_full"} (default) for simultaneous estimation and outcome equations, or \code{"heckman_twostep"} for the two-step estimator.}
 
-\item{distr}{Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default)
-for the Gumbel-logistic; \code{"normal"} for bivariate normality. For two-step
-\code{estimator = "heckman_twostep"} the first stage is always \code{"normal"} for probit.}
+\item{distr}{Character string. When \code{estimator = "mle_full"}: \code{"ev"} (default) for the Gumbel-logistic. For normal distribution: \code{"normal"}. For two-step \code{estimator = "heckman_twostep"}, and the first stage is always \code{"normal"} for probit.}
 
-\item{method}{Optimization method passed to \code{\link[stats]{optim}}.
-Default is \code{"BFGS"}.}
+\item{method}{Optimization method passed to \code{\link[stats]{optim}}. Default is \code{"BFGS"}.}
 
-\item{maxit}{Integer. Maximum number of iterations. Default is \code{1000}.}
+\item{maxit}{Integer. Maximum number of iterations with default at \code{1000}.}
 
-\item{multistart_corr}{Logical. If \code{TRUE} (the default), the
-optimizer is restarted from two additional starting values.}
+\item{multistart_corr}{Logical. If \code{TRUE} (the default), the optimizer is restarted from two additional starting values.}
 
-\item{B}{Integer. Number of bootstrap replications. Set to \code{0}
-(default) to return point estimates only.}
+\item{B}{Integer. Number of bootstrap replications. Set to \code{0} (default) to return point estimates only.}
 }
 \value{
-A named list with three elements:
+A named list with six elements:
   \describe{
-    \item{results}{A character matrix of point estimates (with significance
-      stars when \code{B > 0}) and bootstrapped standard errors in
-      parentheses (when \code{B > 0}).}
-    \item{fit_stats}{A \code{data.frame} with \code{logLik}, \code{AIC},
-      \code{BIC}, \code{n}, and \code{k}.}
-    \item{predictions}{A \code{data.frame} with \code{log_ratio} (point
-      estimates of \eqn{X_2 \hat\beta_2}) and, when \code{B > 0},
-      \code{log_ratio_se} (bootstrap standard errors).}
-    \item{vcov}{A \code{k} by \code{k} bootstrap variance-covariance matrix of the parameter vector, 
-    or \code{NULL} when \code{B = 0}.}
+    \item{results}{A character matrix of point estimates (with significance stars when \code{B > 0}) and bootstrapped standard errors in parentheses (when \code{B > 0}).}
+    \item{fit_stats}{A \code{data.frame} with \code{logLik}, \code{AIC}, \code{BIC}, \code{n}, and \code{k}.}
+    \item{predictions}{A \code{data.frame} with \code{log_ratio} (point estimates of \eqn{X_2 \hat\beta_2}). When \code{B > 0}, it includes \code{log_ratio_se} the bootstrap standard errors.}
+    \item{vcov}{A \code{k} by \code{k} bootstrap variance-covariance matrix of the parameter vector. When \code{B = 0} a \code{NULL}.}
+    \item{outcome}{A list of \code{terms}, \code{xlevels} \code{beta2}, and \code{vcov} for \code{\link{predict.SelectPie}} to compute the predictions using new data.} 
+    \item{specification}{A list detailing the equations, estimator, and distribution selected: \code{y1}, \code{x1}, \code{y2}, \code{x2}, \code{estimator}, and \code{distr}.}
   }
 }
 \description{
-Maximum likelihood estimation for compositional outcome models with
-selection into the sample, with optional bootstrapped standard errors,
-predicted log-ratios, and optional bootstrapped variance-covariance matrix.
-}
-\details{
-Supports three estimators: full MLE with simultaneous estimation of 
-selection and outcome equations under the bivariate extreme value
-(Gumbel-logistic) (\code{distr = "ev"}), full MLE under bivariate
-normality (\code{distr = "normal"}), and the Heckman two-step procedure
-(\code{estimator = "heckman_twostep"}), which uses Probit in the first stage and OLS 
-the second stage.
+Maximum likelihood estimation for compositional outcome models with selection into the sample, with optional bootstrapped standard errors, predicted log-ratios, and optional bootstrapped variance-covariance matrix.
+Supports three estimators: full MLE with simultaneous estimation of selection and outcome equations under the bivariate extreme value
+(Gumbel-logistic) (\code{distr = "ev"}) distribution, full MLE under bivariate normality (\code{distr = "normal"}), and the Heckman two-step procedure (\code{estimator = "heckman_twostep"}), which uses Probit in the first stage and OLS the second stage.
 }
 \seealso{
 \code{\link{int_evd_closed}}, \code{\link{cdfevd}},

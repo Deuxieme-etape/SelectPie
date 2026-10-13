@@ -7,8 +7,7 @@
 cdfevd(x)
 }
 \arguments{
-\item{x}{Numeric vector. Values to be transformed via the standardized
-Gumbel CDF to the (0, 1) interval.}
+\item{x}{Numeric vector. Values to be transformed via the standardized Gumbel CDF to the (0, 1) interval.}
 }
 \value{
 Numeric vector of CDF values in (0, 1).

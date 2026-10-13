@@ -11,12 +11,10 @@ int_evd_closed(x, y, m)
 
 \item{y}{Numeric vector. Value of the outcome variable.}
 
-\item{m}{Numeric scalar. Dependence parameter (\eqn{m \ge 1}); larger
-values imply stronger dependence.}
+\item{m}{Numeric scalar. Dependence parameter (\eqn{m \ge 1}). Larger values imply stronger dependence.}
 }
 \value{
-A strictly positive numeric vector (floored at
-  \code{.Machine$double.xmin}) so that \code{log()} is safe to apply.
+A strictly positive numeric vector (floored at \code{.Machine$double.xmin}) so that \code{log()} is safe to apply.
 }
 \description{
 Closed-form marginal integral for the bivariate Gumbel-logistic.

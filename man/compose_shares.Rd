@@ -25,16 +25,10 @@ A \code{data.frame} with one share column per modelled category,
   delta-method standard errors.
 }
 \description{
-Convert predicted log-ratios from multiple \code{\link{SelectPie}} and/or
-\code{lm} objects into compositional vote shares using the additive
-log-ratio (ALR) inverse transformation. Propagates uncertainty via the
-delta method when standard errors are available.
+Convert predicted log-ratios from multiple \code{\link{SelectPie}} and \code{lm} objects into compositions using the additive log-ratio (ALR) inverse transformation. Propagates uncertainty via. the delta method when applicable.
+The reference category receives the residual share \eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each category receives \eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
 }
 \details{
-The reference category receives the residual share
-\eqn{1 / (1 + \sum_j \exp(\ell_j))}, and each modelled category receives
-\eqn{\exp(\ell_j) / (1 + \sum_j \exp(\ell_j))}.
-
 For \code{\link{SelectPie}} objects, prediction SEs come from the
 bootstrap distribution stored in \code{$predictions$log_ratio_se}.
 For \code{lm} objects, prediction SEs are computed analytically from the
