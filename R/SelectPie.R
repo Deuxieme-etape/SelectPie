@@ -102,8 +102,10 @@ SelectPie <- function(data, y1, x1, y2, x2,
                       multistart_corr = TRUE,
                       B = 0) {
   
-  distr     <- match.arg(distr)
+  distr <- match.arg(distr)
   estimator <- match.arg(estimator)
+  if(estimator == "heckman_twostep") distr <- "normal"
+  
   
   
   # ---- we'll calculate the equation sizes up front and reuse ----
