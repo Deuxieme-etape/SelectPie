@@ -52,12 +52,12 @@ int_evd_closed <- function(x, y, m) {
   
   ex <- exp(-m * x)
   ey <- exp(-m * y)
-  A  <- ex + ey
-  V  <- A^(1 / m)
+  A <- ex + ey
+  V <- A^(1 / m)
   
   dFdy_a <- exp(-V) * A^(1 / m - 1) * ey
-  fy     <- exp(-y) * exp(-exp(-y))
-  out    <- fy - dFdy_a
+  fy <- exp(-y) * exp(-exp(-y))
+  out <- fy - dFdy_a
   
   out[!is.finite(out)] <- 0
   out[out < .Machine$double.xmin] <- .Machine$double.xmin
@@ -119,15 +119,30 @@ int_evd_closed <- function(x, y, m) {
 #'
 #' @export
 SelectPie <- function(data, y1, x1, y2, x2,
-                      estimator       = c("mle_full", "heckman_twostep"),
-                      distr           = c("ev", "normal"),
-                      method          = "BFGS",
-                      maxit           = 1000,
+                      estimator = c("mle_full", "heckman_twostep"),
+                      distr = c("ev", "normal"),
+                      method = "BFGS",
+                      maxit = 1000,
                       multistart_corr = TRUE,
-                      B               = 0) {
+                      B = 0) {
   
   distr     <- match.arg(distr)
   estimator <- match.arg(estimator)
+  
+  
+  # ---- we'll calculate the equation sizes up front and reuse ----
+  f1 <- stats::reformulate(x1)
+  f2 <- stats::reformulate(x2)
+  mf2 <- stats::model.frame(f2, data, na.action = stats::na.pass)
+  tt2 <- stats::terms(mf2)
+  # equation references (for later)
+  X1_ref <- stats::model.matrix(f1, data)
+  X2_ref <- stats::model.matrix(tt2, mf2)
+  # num covs
+  k1 <- ncol(X1_ref)
+  k2 <- ncol(X2_ref)
+  beta2_index <- k1 + seq_len(k2)
+  
   
   # ---- Internal estimation workhorse ----
   .fit <- function(data) {
@@ -150,8 +165,8 @@ SelectPie <- function(data, y1, x1, y2, x2,
         family = stats::binomial(link = "probit"),
         data   = data
       )
-      xb_probit     <- as.vector(X1 %*% stats::coef(probit_fit))
-      imr           <- stats::dnorm(xb_probit) / stats::pnorm(xb_probit)
+      xb_probit <- as.vector(X1 %*% stats::coef(probit_fit))
+      imr <- stats::dnorm(xb_probit) / stats::pnorm(xb_probit)
       data$.__imr__ <- y1v * imr
       
       outcome_fit <- stats::lm(
@@ -195,9 +210,9 @@ SelectPie <- function(data, y1, x1, y2, x2,
           stats::cor(OLSStage2$residuals, OLSStage1$residuals[idx_sel])
         )
         if (!is.finite(r)) r <- 0
-        r         <- max(min(r, 0.95), -0.95)
-        rho0      <- log((r + 1) / (1 - r))
-        sigma0    <- max(stats::sd(OLSStage2$residuals, na.rm = TRUE), 1e-4)
+        r <- max(min(r, 0.95), -0.95)
+        rho0 <- log((r + 1) / (1 - r))
+        sigma0 <- max(stats::sd(OLSStage2$residuals, na.rm = TRUE), 1e-4)
         logsigma0 <- if (is.finite(log(sigma0))) log(sigma0) else 0
         para0 <- c(b1, b2, rho0, logsigma0)
       }
@@ -210,7 +225,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
       
       xb1 <- as.vector(-(X1 %*% beta1))
       xb2 <- as.vector( (X2 %*% beta2))
-      u   <- y2v - xb2
+      u <- y2v - xb2
       
       if (distr == "ev") {
         m     <- exp(para[length(para)]) + 1
@@ -274,11 +289,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
   }
   
   # ---- Internal: extract beta2 from parameter vector ----
-  .get_beta2 <- function(par) {
-    k1 <- length(x1) + 1L
-    k2 <- length(x2) + 1L
-    par[(k1 + 1L):(k1 + k2)]
-  }
+  .get_beta2 <- function(par) par[beta2_index]
   
   # ---- Internal: predicted log-ratios from original data ----
   .predict_lr <- function(par) {
@@ -292,7 +303,7 @@ SelectPie <- function(data, y1, x1, y2, x2,
   # ---- Internal fit statistics ----
   .fit_stats <- function(point_est) {
     
-    n_obs    <- sum(!is.na(data[[y1]]))
+    n_obs <- sum(!is.na(data[[y1]]))
     n_params <- length(point_est)
     
     if (estimator == "heckman_twostep") {
@@ -300,12 +311,10 @@ SelectPie <- function(data, y1, x1, y2, x2,
                         BIC = NA_real_, n = n_obs, k = n_params))
     }
     
-    k1 <- length(x1) + 1L
-    k2 <- length(x2) + 1L
     
     beta1 <- point_est[seq_len(k1)]
     beta2 <- point_est[(k1 + 1L):(k1 + k2)]
-    rho   <- point_est[k1 + k2 + 1L]
+    rho <- point_est[k1 + k2 + 1L]
     sigma <- if(distr == "normal") point_est[k1+k2+2L] else NA_real_
     
     X1 <- stats::model.matrix(stats::reformulate(x1, response = NULL), data = data)
@@ -316,10 +325,10 @@ SelectPie <- function(data, y1, x1, y2, x2,
     
     xb1 <- as.vector(-(X1 %*% beta1))
     xb2 <- as.vector( (X2 %*% beta2))
-    u   <- y2v - xb2
+    u <- y2v - xb2
     
-    ll           <- rep(NA_real_, nrow(data))
-    observed     <- y1v == 1 & !is.na(y2v)
+    ll <- rep(NA_real_, nrow(data))
+    observed <- y1v == 1 & !is.na(y2v)
     not_observed <- y1v == 0
     
     if (distr == "ev") {
@@ -331,8 +340,8 @@ SelectPie <- function(data, y1, x1, y2, x2,
       
     } else if (distr == "normal") {
       ll[not_observed] <- stats::pnorm(xb1[not_observed], log.p = TRUE)
-      z                     <- u[observed] / sigma
-      log_density_u         <- stats::dnorm(z, log = TRUE) - log(sigma)
+      z <- u[observed] / sigma
+      log_density_u <- stats::dnorm(z, log = TRUE) - log(sigma)
       log_selection_given_u <- stats::pnorm(
         (-xb1[observed] + rho * z) / sqrt(1 - rho^2), log.p = TRUE
       )
@@ -342,10 +351,10 @@ SelectPie <- function(data, y1, x1, y2, x2,
     logLik_val <- sum(ll, na.rm = TRUE)
     data.frame(
       logLik = round(logLik_val,                               3),
-      AIC    = round(-2 * logLik_val + 2 * n_params,          3),
-      BIC    = round(-2 * logLik_val + log(n_obs) * n_params, 3),
-      n      = n_obs,
-      k      = n_params
+      AIC = round(-2 * logLik_val + 2 * n_params,          3),
+      BIC = round(-2 * logLik_val + log(n_obs) * n_params, 3),
+      n = n_obs,
+      k = n_params
     )
   }
   
@@ -353,23 +362,20 @@ SelectPie <- function(data, y1, x1, y2, x2,
   point_est <- .fit(data)
   fit_stats <- .fit_stats(point_est)
   
-  # ---- Point estimate log-ratios ----
+  # ---- Point estimate log-ratios -----
   lr_point <- .predict_lr(point_est)
   
   # ---- Row names for results matrix ----
   last_term <- if (estimator == "heckman_twostep") "IMR" else "Corr."
-  x1_full   <- as.vector(rbind(c("(Intercept1)", x1), ""))
+  x1_names <- c("(Intercept1)", colnames(X1_ref)[-1])
+  x2_names <- c("(Intercept2)", colnames(X2_ref)[-1], last_term,if(distr == "normal" && estimator == "mle_full")"Sigma")
   
-  if(distr == "normal" && estimator == "mle_full"){
-    x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term, "Sigma"), ""))
-  } else {
-    x2_full <- as.vector(rbind(c("(Intercept2)", x2, last_term), ""))
-  }
-  
+  x1_full <- as.vector(rbind(x1_names, ""))
+  x2_full <- as.vector(rbind(x2_names, ""))
   row_names <- c(x1_full, x2_full)
-  k         <- length(x1) + length(x2) + if (distr == "normal" && estimator == "mle_full") 4L else 3L
+  k <- length(point_est)
   
-  # ---- Bootstrap ----
+  # ---- Bootstrap -----
   boot_cov <- NULL
   
   if (B > 0) {
@@ -392,29 +398,32 @@ SelectPie <- function(data, y1, x1, y2, x2,
       }, error = function(e) list(coefs = rep(NA_real_, k),
                                   lr    = rep(NA_real_, n)))
       
-      boot_ests[b, ] <- boot_result$coefs
-      boot_lr[b, ]   <- boot_result$lr
+      if(length(boot_result$coefs)==k){
+        boot_ests[b, ] <- boot_result$coefs
+        boot_lr[b, ] <- boot_result$lr  
+      }
+      
     }
     
-    boot_se    <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
-    boot_lr_se <- apply(boot_lr,   2, stats::sd, na.rm = TRUE)
-    boot_cov   <- stats::cov(boot_ests)
+    boot_se <- apply(boot_ests, 2, stats::sd, na.rm = TRUE)
+    boot_lr_se <- apply(boot_lr, 2, stats::sd, na.rm = TRUE)
+    boot_cov <- stats::cov(boot_ests, use = "complete.obs")
     
     # ---- Format results matrix ----
     results <- matrix(NA_character_, nrow = 2 * k, ncol = 1,
                       dimnames = list(row_names, y1))
     
     for (r in seq_len(k)) {
-      est   <- point_est[r]
-      se    <- boot_se[r]
+      est <- point_est[r]
+      se <- boot_se[r]
       tstat <- abs(est / se)
       
       stars <- if (tstat > 2.575) "$^{***}$" else
-        if (tstat > 1.96)  "$^{**}$"  else
-          if (tstat > 1.645) "$^{*}$"   else ""
+        if (tstat > 1.96)  "$^{**}$" else
+          if (tstat > 1.645) "$^{*}$" else ""
       
       results[2 * r - 1, 1] <- paste0(round(est, 3), stars)
-      results[2 * r,     1] <- paste0("(", round(se, 3), ")")
+      results[2 * r, 1] <- paste0("(", round(se, 3), ")")
     }
     
     predictions <- data.frame(
@@ -433,12 +442,56 @@ SelectPie <- function(data, y1, x1, y2, x2,
     )
   }
   
-  list(
-    results     = results,
-    fit_stats   = fit_stats,
-    predictions = predictions,
-    vcov        = boot_cov
+  outcome <- list(
+    terms = tt2, 
+    xlevels = stats::.getXlevels(tt2, mf2), 
+    beta2 = stats::setNames(point_est[beta2_index], colnames(X2_ref)),
+    vcov = if(!is.null(boot_cov)) boot_cov[beta2_index, beta2_index, drop = F]
   )
+  
+  out <- list(
+    results = results, 
+    fit_stats = fit_stats, 
+    predictions = predictions, 
+    vcov = boot_cov, 
+    outcome = outcome, 
+    specification = list(y1 = y1, x1= x1, y2 = y2, x2 = x2, estimator = estimator, distr = distr)
+  )
+  class(out) <- c("SelectPie", "list")
+  out
+}
+
+#' predict.SelectPie
+#' 
+#' Predicted log-ratios (\eqn{X_2 \hat\beta_2}) from a fitted \code{\link{SelectPie}} object. 
+#' 
+#' 
+#' @param object A \code{SelectPie} object. 
+#' @param newdata A \code{data.frame} or \code{NULL}. If \code{NULL}, returns the stored fitted predictions. 
+#' @param se.fit A logical. If \code{TRUE}, then also return the bootstrapped standard errors. \code{B>0} is required. 
+#' @param ... Unused. (wont work without)
+#' @return A numeric vector, or a list with \code{fit} and \code{se.fit} when \code{se.fit = TRUE}. 
+#' 
+#' @export
+predict.SelectPie <- function(object, newdata = NULL, se.fit = FALSE, ...){
+  if(is.null(newdata)){
+    fit <- object$predictions$log_ratio
+    if(!se.fit) return(fit)
+    return(list(fit = fit, se.fit = object$predictions$log_ratio_se))
+  }
+  
+  ob <- object$outcome
+  mf <- stats::model.frame(ob$terms, newdata, na.action = stats::na.pass, xlev = ob$xlevels)
+  X2 <- stats::model.matrix(ob$terms, mf)
+  
+  
+  if(!identical(colnames(X2), names(ob$beta2)))
+    stop("newdata does not match the outcome matrix.")
+  
+  fit <- as.vector(X2%*%ob$beta2)
+  if(!se.fit) return(fit)
+  se <- if(is.null(ob$vcov)) NULL else sqrt(rowSums((X2%*%ob$vcov) * X2))
+  list(fit = fit, se.fit = se)
 }
 
 
@@ -463,20 +516,20 @@ SelectPie <- function(data, y1, x1, y2, x2,
 #'
 #' @export
 latex_table <- function(x,
-                        caption  = NULL,
-                        label    = NULL,
-                        align    = NULL,
+                        caption = NULL,
+                        label = NULL,
+                        align = NULL,
                         booktabs = TRUE) {
   
   # ---- Unpack SelectPie list ----
   if (is.list(x) && all(c("results", "fit_stats") %in% names(x))) {
     fit_stats <- x$fit_stats
-    x         <- x$results
+    x <- x$results
   } else {
     fit_stats <- NULL
   }
   
-  x  <- as.matrix(x)
+  x <- as.matrix(x)
   nr <- nrow(x)
   nc <- ncol(x)
   
@@ -485,7 +538,7 @@ latex_table <- function(x,
   }
   
   intercept2_row <- which(rownames(x) == "(Intercept2)")
-  split_at       <- if (length(intercept2_row) == 1L) intercept2_row else NULL
+  split_at <- if (length(intercept2_row) == 1L) intercept2_row else NULL
   
   top_rule <- if (booktabs) "\\toprule"    else "\\hline"
   mid_rule <- if (booktabs) "\\midrule"    else "\\hline"
@@ -510,7 +563,7 @@ latex_table <- function(x,
     if (!is.null(split_at) && i == split_at)
       out <- c(out, mid_rule, make_section_header("Outcome Equation"))
     row_i <- paste(c(rownames(x)[i], x[i, ]), collapse = " & ")
-    out   <- c(out, paste0(row_i, " \\\\"))
+    out <- c(out, paste0(row_i, " \\\\"))
   }
   
   if (!is.null(fit_stats)) {
@@ -568,10 +621,11 @@ latex_table <- function(x,
 #' @param models A named list where each element is either a
 #'   \code{\link{SelectPie}} results list or a fitted \code{lm} object.
 #'   Names identify the categories and become column names in the output.
-#' @param newdata A \code{data.frame} of observations for which to compute
-#'   predictions. Required when any element of \code{models} is an \code{lm}
-#'   object; ignored for \code{\link{SelectPie}} objects which already carry
-#'   their predictions internally.
+#' @param newdata A \code{data.frame} of observations to compute predictions. 
+#'   Predictions for both \code{lm} and \code{\link{SelectPie}} objects are recomputed from \code{newdata}. 
+#'   If \code{NULL}, SelectPie objects return their stored fitted predictions. 
+#'   
+#'   
 #' @param reference Character string. Name for the reference category column.
 #'   Default is \code{"reference"}.
 #'
@@ -591,17 +645,23 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
   
   # ---- Helper: extract log-ratio and SE from a single model ----
   .extract_lr <- function(model, nm) {
-    
+    if(inherits(model, "SelectPie")){
+      p <- stats::predict(model, newdata = newdata, se.fit = T)
+      return(list(log_ratio = p$fit, log_ratio_se = p$se.fit))
+    }
     # --- lm object ---
     if (inherits(model, "lm")) {
       if (is.null(newdata)) {
         stop("newdata must be supplied when models contains lm objects.")
       }
-      X2  <- stats::model.matrix(model$terms, data = newdata)
-      lr  <- as.vector(X2 %*% stats::coef(model))
+      tt <- stats::delete.response(stats::terms(model))
+      mf <- stats::model.frame(tt, newdata, na.action = stats::na.pass, 
+                               xlev = model$xlevels)
+      X2 <- stats::model.matrix(tt, mf)
+      lr <- as.vector(X2 %*% stats::coef(model))
       # Efficient diagonal of X2 %*% vcov %*% t(X2)
-      V   <- stats::vcov(model)
-      se  <- sqrt(rowSums((X2 %*% V) * X2))
+      V <- stats::vcov(model)
+      se <- sqrt(rowSums((X2 %*% V) * X2))
       return(list(log_ratio = lr, log_ratio_se = se))
     }
     
@@ -623,7 +683,7 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
                       SIMPLIFY = FALSE)
   
   cat_names <- names(models)
-  n_obs     <- length(extracted[[1]]$log_ratio)
+  n_obs <- length(extracted[[1]]$log_ratio)
   
   # Check consistent number of observations
   lens <- vapply(extracted, function(e) length(e$log_ratio), integer(1))
@@ -649,10 +709,10 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
   } else NULL
   
   # ---- ALR inverse transformation ----
-  exp_lr       <- exp(lr_matrix)
-  denom        <- 1 + rowSums(exp_lr)
+  exp_lr <- exp(lr_matrix)
+  denom <- 1 + rowSums(exp_lr)
   share_matrix <- exp_lr / denom
-  ref_share    <- 1 / denom
+  ref_share <- 1 / denom
   
   # ---- Assemble output ----
   out <- as.data.frame(share_matrix)
@@ -667,11 +727,11 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
     colnames(all_shares) <- all_cats
     
     for (j in all_cats) {
-      sj    <- all_shares[, j]
+      sj <- all_shares[, j]
       var_j <- rep(0, n_obs)
       
       for (nm in cat_names) {
-        sk   <- all_shares[, nm]
+        sk <- all_shares[, nm]
         se_k <- se_matrix[, nm]
         
         if (j == nm) {
@@ -754,15 +814,15 @@ compose_shares <- function(models, newdata = NULL, reference = "reference") {
 simulate_shock <- function(data,
                            models,
                            shock_var,
-                           shock_sd        = 1,
-                           reference       = "reference",
-                           B               = 1000,
-                           estimator       = "mle_full",
-                           distr           = "ev",
-                           method          = "BFGS",
-                           maxit           = 1000,
+                           shock_sd = 1,
+                           reference = "reference",
+                           B = 1000,
+                           estimator = "mle_full",
+                           distr = "ev",
+                           method = "BFGS",
+                           maxit = 1000,
                            multistart_corr = TRUE,
-                           seed            = NULL) {
+                           seed = NULL) {
   
   if (!is.list(models) || is.null(names(models)))
     stop("models must be a named list of model specifications.")
@@ -770,9 +830,9 @@ simulate_shock <- function(data,
   # ---- Classify each specification as "selectpie" or "lm" ----
   .specification_type <- function(specification, nm) {
     has_selection <- all(c("y1", "x1", "y2", "x2") %in% names(specification))
-    has_outcome   <- all(c("y2", "x2") %in% names(specification))
+    has_outcome <- all(c("y2", "x2") %in% names(specification))
     if (has_selection) return("selectpie")
-    if (has_outcome)   return("lm")
+    if (has_outcome) return("lm")
     stop("Model '", nm, "' must have y2 and x2 (lm), or y1, x1, y2, x2 (SelectPie).")
   }
   
@@ -784,13 +844,13 @@ simulate_shock <- function(data,
   if (!is.null(seed)) set.seed(seed)
   
   cat_names <- names(models)
-  all_cats  <- c(cat_names, reference)
-  n_obs     <- nrow(data)
-  index     <- seq_len(n_obs)
+  all_cats <- c(cat_names, reference)
+  n_obs <- nrow(data)
+  index <- seq_len(n_obs)
   
   # Pre-compute shocked data (original + shock applied to shock_var)
-  shock_size            <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
-  data_shocked          <- data
+  shock_size <- shock_sd * stats::sd(data[[shock_var]], na.rm = TRUE)
+  data_shocked <- data
   data_shocked[[shock_var]] <- data_shocked[[shock_var]] + shock_size
   
   boot_diffs <- matrix(NA_real_, nrow = B, ncol = length(all_cats),
@@ -803,7 +863,7 @@ simulate_shock <- function(data,
     
     result <- tryCatch({
       
-      sample_idx     <- sample(index, n_obs, replace = TRUE)
+      sample_idx <- sample(index, n_obs, replace = TRUE)
       bootstrap_data <- data[sample_idx, ]
       
       # ---- Re-estimate all models on bootstrap data ----
@@ -812,17 +872,17 @@ simulate_shock <- function(data,
         
         if (specification_types[[nm]] == "selectpie") {
           # Re-estimate via SelectPie (B = 0: point estimates only)
-          SelectPie(data            = bootstrap_data,
-                    y1              = specification$y1,
-                    x1              = specification$x1,
-                    y2              = specification$y2,
-                    x2              = specification$x2,
-                    distr           = distr,
-                    estimator       = estimator,
-                    method          = method,
-                    maxit           = maxit,
+          SelectPie(data = bootstrap_data,
+                    y1 = specification$y1,
+                    x1 = specification$x1,
+                    y2 = specification$y2,
+                    x2 = specification$x2,
+                    distr = distr,
+                    estimator = estimator,
+                    method = method,
+                    maxit = maxit,
                     multistart_corr = multistart_corr,
-                    B               = 0)
+                    B = 0)
         } else {
           # Re-estimate via lm
           stats::lm(
@@ -835,12 +895,12 @@ simulate_shock <- function(data,
       
       # ---- Baseline shares on original data ----
       shares_base <- compose_shares(fitted,
-                                    newdata   = data,
+                                    newdata = data,
                                     reference = reference)
       
       # ---- Shocked shares on shocked data ----
       shares_shock <- compose_shares(fitted,
-                                     newdata   = data_shocked,
+                                     newdata = data_shocked,
                                      reference = reference)
       
       # ---- Mean difference across observations ----
@@ -862,14 +922,14 @@ simulate_shock <- function(data,
   
   # ---- Summarise bootstrap distribution ----
   means <- apply(boot_diffs, 2, mean, na.rm = TRUE)
-  sds   <- apply(boot_diffs, 2, stats::sd, na.rm = TRUE)
+  sds <- apply(boot_diffs, 2, stats::sd, na.rm = TRUE)
   
   data.frame(
-    category  = all_cats,
-    mean      = round(means, 6),
-    sd        = round(sds,   6),
-    lb        = round(means - 1.96 * sds, 6),
-    ub        = round(means + 1.96 * sds, 6),
+    category = all_cats,
+    mean = round(means, 6),
+    sd = round(sds,   6),
+    lb = round(means - 1.96 * sds, 6),
+    ub = round(means + 1.96 * sds, 6),
     row.names = NULL
   )
 }
@@ -936,32 +996,32 @@ predict_shock <- function(models,
     stop("shock_var '", shock_var, "' not found in newdata.")
   
   # ---- Build shocked data ----
-  shock_size              <- shock_sd * stats::sd(newdata[[shock_var]], na.rm = TRUE)
-  newdata_shocked         <- newdata
+  shock_size <- shock_sd * stats::sd(newdata[[shock_var]], na.rm = TRUE)
+  newdata_shocked <- newdata
   newdata_shocked[[shock_var]] <- newdata_shocked[[shock_var]] + shock_size
   
   # ---- Baseline and shocked shares ----
   shares_base  <- compose_shares(models,
-                                 newdata   = newdata,
+                                 newdata = newdata,
                                  reference = reference)
   
   shares_shock <- compose_shares(models,
-                                 newdata   = newdata_shocked,
+                                 newdata = newdata_shocked,
                                  reference = reference)
   
   # ---- Mean difference per category ----
-  all_cats  <- c(names(models), reference)
-  has_se    <- all(paste0(all_cats, "_se") %in% names(shares_base))
+  all_cats <- c(names(models), reference)
+  has_se <- all(paste0(all_cats, "_se") %in% names(shares_base))
   
   mean_diff <- vapply(all_cats, function(cat) {
     mean(shares_shock[[cat]] - shares_base[[cat]], na.rm = TRUE)
   }, numeric(1))
   
   # ---- SE of the mean difference via delta method SEs on shares ----
-  # SE(mean(s_shock - s_base)) ≈ sqrt(SE(s_shock)^2 + SE(s_base)^2) / sqrt(n)
+  # SE(mean(s_shock - s_base)) \approx sqrt(SE(s_shock)^2 + SE(s_base)^2) / sqrt(n)
   diff_se <- if (has_se) {
     vapply(all_cats, function(cat) {
-      se_base  <- shares_base[[paste0(cat,  "_se")]]
+      se_base <- shares_base[[paste0(cat,  "_se")]]
       se_shock <- shares_shock[[paste0(cat, "_se")]]
       sqrt(mean(se_base^2 + se_shock^2, na.rm = TRUE)) / sqrt(nrow(newdata))
     }, numeric(1))
@@ -970,9 +1030,9 @@ predict_shock <- function(models,
   }
   
   data.frame(
-    category  = all_cats,
+    category = all_cats,
     mean_diff = round(mean_diff, 6),
-    diff_se   = round(diff_se,   6),
+    diff_se = round(diff_se, 6),
     row.names = NULL
   )
 }

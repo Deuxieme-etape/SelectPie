@@ -6,13 +6,12 @@ Authors@R: c(
 	     person("Erik", "Chi", email = "erikchi@tamu.edu", role = c("aut", "cre")), 
 	     person("Thiago", "Moreira", email = "tmoreira@lsu.edu", role = c("aut")),
 	     person("Guy", "Whitten", email = "g-whitten@tamu.edu", role = c("aut")),
-	     person("Yongzhi", "Xu", email = "yz_xu@tamu.edu", role = c("aut"))
+	     person("Yongzhi", "Xu", email = "xuyongzhi6@outlook.com", role = c("aut"))
             )
-Description: Maximum likelihood estimation for compositional outcome models
-    that account for selection into the sample using a bivariate extreme
-    value (Gumbel-logistic) copula. Provides the core estimator SelectPie(),
-    supporting helpers for the bivariate EVD integral and marginal CDF, and
-    a utility for exporting results to LaTeX tables.
+Description: Maximum likelihood estimation for compositional outcome models that
+  account for selection into the sample using a bivariate extreme value (Gumbel-logistic) distribution.
+  The core estimation function is SelectPie(). Other supporting functions are provided for supporting the estimation,
+  post-estimation predictions and simulations, converting log-ratios back to shares, and latex table utilities. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:

@@ -11,10 +11,9 @@ compose_shares(models, newdata = NULL, reference = "reference")
 \code{\link{SelectPie}} results list or a fitted \code{lm} object.
 Names identify the categories and become column names in the output.}
 
-\item{newdata}{A \code{data.frame} of observations for which to compute
-predictions. Required when any element of \code{models} is an \code{lm}
-object; ignored for \code{\link{SelectPie}} objects which already carry
-their predictions internally.}
+\item{newdata}{A \code{data.frame} of observations to compute predictions. 
+Predictions for both \code{lm} and \code{\link{SelectPie}} objects are recomputed from \code{newdata}. 
+If \code{NULL}, SelectPie objects return their stored fitted predictions.}
 
 \item{reference}{Character string. Name for the reference category column.
 Default is \code{"reference"}.}
