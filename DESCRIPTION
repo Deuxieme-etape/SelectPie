@@ -1,7 +1,7 @@
 Package: SelectPie
 Type: Package
 Title: MLE for Compositional Models with Sample Selection
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(
 	     person("Erik", "Chi", email = "erikchi@tamu.edu", role = c("aut", "cre")), 
 	     person("Thiago", "Moreira", email = "tmoreira@lsu.edu", role = c("aut")),
